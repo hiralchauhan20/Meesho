@@ -10,6 +10,7 @@ import orderRoutes from "./routes/orderRoutes.js";
 import expenseRoutes from "./routes/expenseRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import investmentRoutes from "./routes/investmentRoutes.js";
 
 dotenv.config();
 connectDB();
@@ -30,6 +31,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/investments", investmentRoutes);
 
 // mongoose
 //   .connect(process.env.MONGO_URL)

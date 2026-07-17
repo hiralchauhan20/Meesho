@@ -7,6 +7,7 @@ import Navbar from "./components/Navbar";
 import Ledger from "./pages/Ledger";
 import Reports from "./pages/Reports";
 import Login from "./pages/Login";
+import Investment from "./pages/Investment";
 
 import "./App.css";
 
@@ -50,6 +51,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Reports />} />
             <Route path="/accounts" element={<Ledger />} />
+            <Route path="/investments" element={<Investment />} />
           </Routes>
         </div>
       </div>

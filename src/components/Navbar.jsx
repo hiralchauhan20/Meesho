@@ -7,9 +7,11 @@ function Navbar({ toggleTheme, theme }) {
   const getPageName = () => {
     switch (location.pathname) {
       case "/":
-        return "Accounts";
-      case "/reports":
         return "Monthly Profit & Loss Statement";
+      case "/accounts":
+        return "Accounts Ledger";
+      case "/investments":
+        return "Investment & Bulk Purchase Ledger";
       default:
         return "Meesho Manager";
     }

@@ -547,7 +547,7 @@ function Ledger() {
           {/* Row 3: Metrics & Insert */}
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Quantity (Qty)</label>
-            <input type="number" min="1" placeholder="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} required style={{ width: "100%" }} />
+            <input type="number" min="0.01" step="any" placeholder="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} required style={{ width: "100%" }} />
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>GST Rate (%)</label>
@@ -882,7 +882,7 @@ function Ledger() {
                 </div>
                 <div>
                   <label>Quantity (Qty)</label>
-                  <input type="number" min="1" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} required />
+                  <input type="number" min="0.01" step="any" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} required />
                 </div>
                 <div>
                   <label>GST Rate (%)</label>

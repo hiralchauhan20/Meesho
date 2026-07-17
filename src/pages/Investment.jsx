@@ -377,7 +377,7 @@ function Investment() {
         </h3>
         
         {/* Entry Grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr) auto", gap: "16px", alignItems: "end" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 2fr 0.8fr 1fr 1.2fr 1.2fr auto", gap: "16px", alignItems: "end" }}>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Date</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} required style={{ width: "100%" }} />
@@ -393,18 +393,16 @@ function Investment() {
               style={{ width: "100%" }} 
             />
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Qty</label>
-              <input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} required style={{ width: "100%" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Unit</label>
-              <select value={unitType} onChange={(e) => setUnitType(e.target.value)} style={{ width: "90px" }}>
-                <option value="Dozen">Dozen</option>
-                <option value="Packets">Packets</option>
-              </select>
-            </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Qty</label>
+            <input type="number" min="0.01" step="any" value={quantity} onChange={(e) => setQuantity(e.target.value)} required style={{ width: "100%" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Unit</label>
+            <select value={unitType} onChange={(e) => setUnitType(e.target.value)} style={{ width: "100%" }}>
+              <option value="Dozen">Dozen</option>
+              <option value="Packets">Packets</option>
+            </select>
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Price (₹)</label>
@@ -614,7 +612,7 @@ function Investment() {
                 </div>
                 <div>
                   <label>Quantity</label>
-                  <input type="number" min="1" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} required />
+                  <input type="number" min="0.01" step="any" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} required />
                 </div>
                 <div>
                   <label>Unit Type</label>

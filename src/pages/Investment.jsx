@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaSearch, FaTimes, FaBriefcase } from "react-icons/fa";
+import { FaPlus, FaTrash, FaEdit, FaFileExport, FaCalendarAlt, FaSearch, FaTimes, FaBriefcase } from "react-icons/fa";
 
 function Investment() {
   const [investments, setInvestments] = useState([]);
@@ -33,7 +33,7 @@ function Investment() {
     fetchInvestments();
   }, []);
 
-  const fetchInvestments = async () => {
+  async function fetchInvestments() {
     try {
       const res = await fetch("/api/investments", {
         headers: {
@@ -48,7 +48,7 @@ function Investment() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   // Log new investment
   const handleSubmit = async (e) => {
@@ -201,15 +201,30 @@ function Investment() {
     let totalPrice = 0;
     let totalDozens = 0;
     let totalPackets = 0;
+    let totalPcs = 0;
     let completeCount = 0;
     let pendingCount = 0;
+    let pendingDozens = 0;
+    let pendingPackets = 0;
+    let pendingPcs = 0;
 
     filteredInvestments.forEach((inv) => {
       totalPrice += inv.price || 0;
       if (inv.unitType === "Dozen") {
         totalDozens += inv.quantity || 0;
-      } else {
+        if (inv.status === "Pending") {
+          pendingDozens += inv.quantity || 0;
+        }
+      } else if (inv.unitType === "Packets") {
         totalPackets += inv.quantity || 0;
+        if (inv.status === "Pending") {
+          pendingPackets += inv.quantity || 0;
+        }
+      } else if (inv.unitType === "Pcs") {
+        totalPcs += inv.quantity || 0;
+        if (inv.status === "Pending") {
+          pendingPcs += inv.quantity || 0;
+        }
       }
 
       if (inv.status === "Complete") {
@@ -223,9 +238,13 @@ function Investment() {
       totalPrice,
       totalDozens,
       totalPackets,
+      totalPcs,
       totalCount: filteredInvestments.length,
       completeCount,
-      pendingCount
+      pendingCount,
+      pendingDozens,
+      pendingPackets,
+      pendingPcs
     };
   }, [filteredInvestments]);
 
@@ -349,12 +368,16 @@ function Investment() {
             <span>Invested: ₹{stats.totalPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
             <span style={{ borderLeft: "1px solid var(--border-color)", paddingLeft: "10px" }}>{stats.totalDozens} Dz</span>
             <span style={{ borderLeft: "1px solid var(--border-color)", paddingLeft: "10px" }}>{stats.totalPackets} Pkt</span>
+            <span style={{ borderLeft: "1px solid var(--border-color)", paddingLeft: "10px" }}>{stats.totalPcs} Pcs</span>
           </div>
           <div style={{ background: "rgba(34, 197, 94, 0.08)", border: "1px solid rgba(34, 197, 94, 0.2)", padding: "6px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--success)" }}>
             Complete: {stats.completeCount}
           </div>
-          <div style={{ background: "rgba(234, 179, 8, 0.08)", border: "1px solid rgba(234, 179, 8, 0.2)", padding: "6px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "#d97706" }}>
-            Pending: {stats.pendingCount}
+          <div style={{ background: "rgba(234, 179, 8, 0.08)", border: "1px solid rgba(234, 179, 8, 0.2)", padding: "6px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "#d97706", display: "flex", gap: "8px" }}>
+            <span>Pending: {stats.pendingCount}</span>
+            <span style={{ borderLeft: "1px solid rgba(234, 179, 8, 0.2)", paddingLeft: "8px" }}>{stats.pendingDozens} Dz</span>
+            <span style={{ borderLeft: "1px solid rgba(234, 179, 8, 0.2)", paddingLeft: "8px" }}>{stats.pendingPackets} Pkt</span>
+            <span style={{ borderLeft: "1px solid rgba(234, 179, 8, 0.2)", paddingLeft: "8px" }}>{stats.pendingPcs} Pcs</span>
           </div>
         </div>
       </div>
@@ -402,6 +425,7 @@ function Investment() {
             <select value={unitType} onChange={(e) => setUnitType(e.target.value)} style={{ width: "100%" }}>
               <option value="Dozen">Dozen</option>
               <option value="Packets">Packets</option>
+              <option value="Pcs">Pcs</option>
             </select>
           </div>
           <div>
@@ -565,7 +589,7 @@ function Investment() {
                   </td>
                   <td style={{ padding: "16px", textAlign: "center", fontSize: "13px", color: "var(--text-primary)" }}>
                     <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Total Units</div>
-                    <div>{stats.totalDozens} Dz / {stats.totalPackets} Pkt</div>
+                    <div>{stats.totalDozens} Dz / {stats.totalPackets} Pkt / {stats.totalPcs} Pcs</div>
                   </td>
                   <td style={{ padding: "16px" }}></td>
                   <td 
@@ -619,6 +643,7 @@ function Investment() {
                   <select value={editUnitType} onChange={(e) => setEditUnitType(e.target.value)}>
                     <option value="Dozen">Dozen</option>
                     <option value="Packets">Packets</option>
+                    <option value="Pcs">Pcs</option>
                   </select>
                 </div>
                 <div>

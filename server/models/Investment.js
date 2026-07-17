@@ -21,7 +21,7 @@ const investmentSchema = new mongoose.Schema(
     },
     unitType: {
       type: String,
-      enum: ["Dozen", "Packets"],
+      enum: ["Dozen", "Packets", "Pcs"],
       default: "Dozen",
     },
     price: {

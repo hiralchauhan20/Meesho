@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "html5-qrcode": "^2.3.8",
+    "pdfjs-dist": "^6.1.200",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-icons": "^5.7.0",

@@ -41,7 +41,7 @@ app.use("/api/users", userRoutes);
 //   });
 
 // Catch-all handler to serve index.html for any frontend client routing
-app.get("*", (req, res) => {
+app.get("*splat", (req, res) => {
   res.sendFile(path.join(__dirname, "../dist/index.html"));
 });
 

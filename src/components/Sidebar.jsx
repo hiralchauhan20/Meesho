@@ -17,11 +17,11 @@ function Sidebar({ onLogout }) {
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
         <Link to="/" className={isActive("/")}>
-          <FaTable /> Accounts
+          <FaChartBar /> Monthly P&L
         </Link>
 
-        <Link to="/reports" className={isActive("/reports")}>
-          <FaChartBar /> Monthly P&L
+        <Link to="/accounts" className={isActive("/accounts")}>
+          <FaTable /> Accounts
         </Link>
       </div>
 

@@ -1,16 +1,17 @@
 import { useState, useEffect } from "react";
-import { FaPlus, FaTrash, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine } from "react-icons/fa";
+import { FaPlus, FaTrash, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen } from "react-icons/fa";
 
 const calculateOrderProfit = (o) => {
   const paymentStatus = o.paymentStatus || "Pending";
-  if (paymentStatus === "Pending" || paymentStatus === "Cancel" || paymentStatus === "RTO Returned") {
+  if (paymentStatus === "Pending" || paymentStatus === "RTO Returned") {
     return 0;
+  }
+  if (paymentStatus === "Cancel") {
+    return -3;
   }
   if (paymentStatus === "Return") {
     return -157;
   }
-  
-  // Complete state: calculate profit normally
   const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
   const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
   const gstRate = o.gst || o.productId?.gst || 0;
@@ -25,6 +26,11 @@ function Reports() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  // Interactive Chart States
+  const [activeMetric, setActiveMetric] = useState("income");
+  const [hoveredMonthIndex, setHoveredMonthIndex] = useState(null);
 
   // Form states for extra expenses
   const [title, setTitle] = useState("");
@@ -205,6 +211,184 @@ function Reports() {
 
   const totals = getCumulativeTotals();
 
+  // ── Yearly chart data ──────────────────────────────────────────
+  const getAvailableYears = () => {
+    const years = new Set();
+    orders.forEach((o) => years.add(new Date(o.date || o.createdAt).getFullYear()));
+    expenses.forEach((e) => years.add(new Date(e.date || e.createdAt).getFullYear()));
+    return Array.from(years).sort((a, b) => b - a);
+  };
+
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  const getYearlyChartData = () => {
+    const data = MONTHS.map((m) => ({
+      month: m,
+      profit: 0,
+      orders: 0,
+      income: 0,
+      returns: 0
+    }));
+
+    orders.forEach((o) => {
+      const d = new Date(o.date || o.createdAt);
+      if (d.getFullYear() === selectedYear) {
+        const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
+        const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
+        const qtyVal = o.quantity || 1;
+        const payStatus = o.paymentStatus || "Pending";
+
+        // Net Profit (Order Profit)
+        data[d.getMonth()].profit += calculateOrderProfit(o);
+
+        // Total Orders Count
+        data[d.getMonth()].orders += 1;
+
+        // Income (Sales revenue from Completed orders)
+        if (payStatus === "Complete") {
+          data[d.getMonth()].income += sellingVal * qtyVal;
+        }
+
+        // Returns count
+        if (payStatus === "Return" || payStatus === "RTO Returned") {
+          data[d.getMonth()].returns += 1;
+        }
+      }
+    });
+
+    expenses.forEach((e) => {
+      const d = new Date(e.date || e.createdAt);
+      if (d.getFullYear() === selectedYear) {
+        data[d.getMonth()].profit -= e.amount;
+      }
+    });
+
+    return data;
+  };
+
+  const chartData = getYearlyChartData();
+  const yearTotal = chartData.reduce((s, d) => s + d.profit, 0);
+  const yearOrders = chartData.reduce((s, d) => s + d.orders, 0);
+  const yearIncome = chartData.reduce((s, d) => s + d.income, 0);
+  const yearReturns = chartData.reduce((s, d) => s + d.returns, 0);
+  const availableYears = getAvailableYears();
+
+  // Metric configurations for line charts
+  const METRIC_CONFIGS = {
+    income: {
+      label: "Income (Revenue)",
+      color: "#10b981", // Green
+      glow: "rgba(16, 185, 129, 0.4)",
+      bgGrad: "url(#incomeGrad)",
+      prefix: "₹",
+    },
+    profit: {
+      label: "Net Profit",
+      color: "#6366f1", // Indigo
+      glow: "rgba(99, 102, 241, 0.4)",
+      bgGrad: "url(#profitGrad)",
+      prefix: "₹",
+    },
+    orders: {
+      label: "Total Orders",
+      color: "#0ea5e9", // Blue
+      glow: "rgba(14, 165, 233, 0.4)",
+      bgGrad: "url(#ordersGrad)",
+      prefix: "",
+    },
+    returns: {
+      label: "Returns & RTO",
+      color: "#f59e0b", // Orange/Yellow
+      glow: "rgba(245, 158, 11, 0.4)",
+      bgGrad: "url(#returnsGrad)",
+      prefix: "",
+    }
+  };
+
+  const activeConfig = METRIC_CONFIGS[activeMetric];
+  const activeValues = chartData.map((d) => d[activeMetric]);
+  const minVal = activeMetric === "profit" ? Math.min(...activeValues, 0) : 0;
+  const maxVal = Math.max(...activeValues, 1);
+  const valRange = maxVal - minVal;
+  
+  const mainPoints = activeValues.map((val, i) => ({
+    x: 80 + (i / 11) * 880,
+    y: 270 - ((val - minVal) / valRange) * 230,
+    val
+  }));
+
+  const mainLinePath = mainPoints.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+  const mainAreaPath = `${mainLinePath} L${mainPoints[11].x},270 L${mainPoints[0].x},270 Z`;
+
+  const yGridLines = [0, 0.25, 0.5, 0.75, 1].map((f) => {
+    const val = minVal + f * valRange;
+    const y = 270 - f * 230;
+    return { y, val };
+  });
+
+  const zeroY = activeMetric === "profit" && minVal < 0 ? 270 - ((0 - minVal) / valRange) * 230 : null;
+
+  // Reusable Sparkline Generator for the 2x2 grid
+  const renderSparkline = (metric, color, isCurrency) => {
+    const values = chartData.map((d) => d[metric]);
+    const min = metric === "profit" ? Math.min(...values, 0) : 0;
+    const max = Math.max(...values, 1);
+    const range = max - min;
+    const W = 360, H = 100, PAD_T = 10, PAD_B = 10, PAD_L = 10, PAD_R = 10;
+    const innerW = W - PAD_L - PAD_R;
+    const innerH = H - PAD_T - PAD_B;
+
+    const points = values.map((val, i) => ({
+      x: PAD_L + (i / 11) * innerW,
+      y: PAD_T + innerH - (range > 0 ? ((val - min) / range) * innerH : 0),
+    }));
+
+    const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+    const areaPath = `${linePath} L${points[11].x},${PAD_T + innerH} L${points[0].x},${PAD_T + innerH} Z`;
+    
+    const gradId = `sparklineGrad-${metric}`;
+
+    return (
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: "block", marginTop: "10px" }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.0" />
+          </linearGradient>
+        </defs>
+        
+        {metric === "profit" && min < 0 && (
+          <line
+            x1={PAD_L}
+            y1={PAD_T + innerH - (range > 0 ? ((0 - min) / range) * innerH : 0)}
+            x2={W - PAD_R}
+            y2={PAD_T + innerH - (range > 0 ? ((0 - min) / range) * innerH : 0)}
+            stroke="rgba(239, 68, 68, 0.2)"
+            strokeWidth="1"
+            strokeDasharray="3 3"
+          />
+        )}
+
+        <path d={areaPath} fill={`url(#${gradId})`} />
+
+        <path
+          d={linePath}
+          fill="none"
+          stroke={color}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {points.map((p, i) => (
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r="2.5" fill={color} />
+          </g>
+        ))}
+      </svg>
+    );
+  };
+
   const exportCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
     csvContent += "Monthly Profit and Loss Statement - Meesho Manager\n\n";
@@ -283,6 +467,355 @@ function Reports() {
           <div className="stat-card-value">₹{totals.netProfit.toLocaleString()}</div>
           <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Revenue minus all expenses</div>
         </div>
+      </div>
+
+      {/* ── Yearly Graph (Interactive Line Chart) ── */}
+      <div style={{
+        background: "var(--glass-bg)",
+        border: "1px solid var(--border-color)",
+        borderRadius: "12px",
+        padding: "24px",
+        marginTop: "24px",
+        boxShadow: "var(--glass-shadow)",
+        position: "relative"
+      }}>
+        {/* Header row */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+          <div>
+            <h3 style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>
+              📊 Performance Analytics Dashboard
+            </h3>
+            <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "4px 0 0" }}>
+              Detailed interactive monthly trends for {selectedYear}
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              style={{ height: "36px", padding: "0 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", width: "auto" }}
+            >
+              {(availableYears.length > 0 ? availableYears : [new Date().getFullYear()]).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <div style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: "8px", padding: "6px 14px", textAlign: "center" }}>
+                <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Year Orders</div>
+                <div style={{ fontSize: "16px", fontWeight: "800", color: "var(--success)" }}>{yearOrders}</div>
+              </div>
+              <div style={{
+                background: yearTotal >= 0 ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
+                border: `1px solid ${yearTotal >= 0 ? "rgba(16,185,129,0.25)" : "rgba(239,68,68,0.25)"}`,
+                borderRadius: "8px", padding: "6px 14px", textAlign: "center"
+              }}>
+                <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Year Profit</div>
+                <div style={{ fontSize: "16px", fontWeight: "800", color: yearTotal >= 0 ? "var(--success)" : "var(--danger)" }}>
+                  ₹{yearTotal.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tab Selector Buttons */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "24px", overflowX: "auto", paddingBottom: "4px" }}>
+          {[
+            { id: "income", label: "Income", val: yearIncome, prefix: "₹", color: "#10b981" },
+            { id: "profit", label: "Net Profit", val: yearTotal, prefix: "₹", color: "#6366f1" },
+            { id: "orders", label: "Total Orders", val: yearOrders, prefix: "", color: "#0ea5e9" },
+            { id: "returns", label: "Returns & RTO", val: yearReturns, prefix: "", color: "#f59e0b" }
+          ].map((tab) => {
+            const isActive = activeMetric === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveMetric(tab.id)}
+                type="button"
+                style={{
+                  background: isActive ? `rgba(${tab.id === 'income' ? '16,185,129' : tab.id === 'profit' ? '99,102,241' : tab.id === 'orders' ? '14,165,233' : '245,158,11'}, 0.15)` : "rgba(255,255,255,0.02)",
+                  border: isActive ? `1px solid ${tab.color}` : "1px solid var(--border-color)",
+                  borderRadius: "8px",
+                  padding: "10px 16px",
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  gap: "4px",
+                  minWidth: "140px",
+                  transition: "all var(--transition-fast)",
+                  outline: "none"
+                }}
+              >
+                <span style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: "500" }}>{tab.label}</span>
+                <span style={{ fontSize: "16px", fontWeight: "800", color: isActive ? tab.color : "var(--text-primary)" }}>
+                  {tab.prefix}{tab.id === "profit" && tab.val < 0 ? "-" : ""}{Math.abs(tab.val).toLocaleString()}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Large SVG Line Chart */}
+        <div style={{ overflowX: "auto", position: "relative" }}>
+          <svg
+            width="100%"
+            height="320"
+            viewBox="0 0 1000 320"
+            style={{ display: "block", minWidth: "700px" }}
+          >
+            <defs>
+              <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+              </linearGradient>
+              <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
+              </linearGradient>
+              <linearGradient id="ordersGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.0" />
+              </linearGradient>
+              <linearGradient id="returnsGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
+              </linearGradient>
+            </defs>
+
+            {/* Grid Lines */}
+            {yGridLines.map((gl, i) => (
+              <g key={i}>
+                <line
+                  x1="80"
+                  y1={gl.y}
+                  x2="960"
+                  y2={gl.y}
+                  stroke="rgba(255, 255, 255, 0.05)"
+                  strokeWidth="1"
+                />
+                <text
+                  x="70"
+                  y={gl.y + 4}
+                  textAnchor="end"
+                  fontSize="11"
+                  fill="var(--text-muted)"
+                  fontWeight="500"
+                >
+                  {activeConfig.prefix}{gl.val >= 0 ? "" : "-"}{Math.abs(gl.val) >= 100000 ? (Math.abs(gl.val) / 1000).toFixed(0) + "k" : Math.abs(gl.val).toLocaleString()}
+                </text>
+              </g>
+            ))}
+
+            {/* Zero line indicator for Net Profit */}
+            {zeroY !== null && (
+              <line
+                x1="80"
+                y1={zeroY}
+                x2="960"
+                y2={zeroY}
+                stroke="#ef4444"
+                strokeWidth="1.5"
+                strokeDasharray="4 3"
+                opacity="0.4"
+              />
+            )}
+
+            {/* Area Path */}
+            <path
+              d={mainAreaPath}
+              fill={activeConfig.bgGrad}
+            />
+
+            {/* Trend Line */}
+            <path
+              d={mainLinePath}
+              fill="none"
+              stroke={activeConfig.color}
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+
+            {/* Static X-Axis Labels */}
+            {MONTHS.map((m, i) => (
+              <text
+                key={i}
+                x={80 + (i / 11) * 880}
+                y="295"
+                textAnchor="middle"
+                fontSize="11"
+                fill="var(--text-secondary)"
+                fontWeight="600"
+              >
+                {m}
+              </text>
+            ))}
+
+            {/* Hover Guides and Markers */}
+            {hoveredMonthIndex !== null && (
+              <g>
+                <line
+                  x1={mainPoints[hoveredMonthIndex].x}
+                  y1="40"
+                  x2={mainPoints[hoveredMonthIndex].x}
+                  y2="270"
+                  stroke="rgba(255, 255, 255, 0.15)"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 4"
+                />
+                <circle
+                  cx={mainPoints[hoveredMonthIndex].x}
+                  cy={mainPoints[hoveredMonthIndex].y}
+                  r="8"
+                  fill={activeConfig.color}
+                  opacity="0.4"
+                />
+                <circle
+                  cx={mainPoints[hoveredMonthIndex].x}
+                  cy={mainPoints[hoveredMonthIndex].y}
+                  r="5"
+                  fill={activeConfig.color}
+                />
+                <circle
+                  cx={mainPoints[hoveredMonthIndex].x}
+                  cy={mainPoints[hoveredMonthIndex].y}
+                  r="2.5"
+                  fill="#ffffff"
+                />
+              </g>
+            )}
+
+            {/* Transparent Hover Interactivity Rectangles */}
+            {MONTHS.map((_, i) => {
+              const x = 80 + (i / 11) * 880;
+              const width = 880 / 11;
+              return (
+                <rect
+                  key={i}
+                  x={x - width / 2}
+                  y="20"
+                  width={width}
+                  height="260"
+                  fill="transparent"
+                  style={{ cursor: "pointer" }}
+                  onMouseEnter={() => setHoveredMonthIndex(i)}
+                  onMouseLeave={() => setHoveredMonthIndex(null)}
+                />
+              );
+            })}
+          </svg>
+
+          {/* HTML Overlay Tooltip */}
+          {hoveredMonthIndex !== null && (
+            <div
+              style={{
+                position: "absolute",
+                left: `${80 + (hoveredMonthIndex / 11) * 880 + 15}px`,
+                top: `${Math.min(mainPoints[hoveredMonthIndex].y, 140)}px`,
+                transform: hoveredMonthIndex > 8 ? "translateX(-230px)" : "none",
+                background: "var(--bg-secondary)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "8px",
+                padding: "14px",
+                boxShadow: "var(--glass-shadow)",
+                pointerEvents: "none",
+                zIndex: 10,
+                minWidth: "200px",
+                transition: "left-margin 0.08s ease-out"
+              }}
+            >
+              <div style={{ fontWeight: "700", fontSize: "13px", marginBottom: "8px", color: "var(--text-primary)", borderBottom: "1px solid var(--border-color)", paddingBottom: "4px" }}>
+                {chartData[hoveredMonthIndex].month} {selectedYear}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                  <span style={{ color: "var(--text-secondary)" }}>Income:</span>
+                  <span style={{ fontWeight: "600", color: "#10b981" }}>₹{chartData[hoveredMonthIndex].income.toLocaleString()}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                  <span style={{ color: "var(--text-secondary)" }}>Net Profit:</span>
+                  <span style={{ fontWeight: "600", color: chartData[hoveredMonthIndex].profit >= 0 ? "#10b981" : "#ef4444" }}>
+                    {chartData[hoveredMonthIndex].profit >= 0 ? "" : "-"}₹{Math.abs(chartData[hoveredMonthIndex].profit).toLocaleString()}
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                  <span style={{ color: "var(--text-secondary)" }}>Total Orders:</span>
+                  <span style={{ fontWeight: "600", color: "#0ea5e9" }}>{chartData[hoveredMonthIndex].orders}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                  <span style={{ color: "var(--text-secondary)" }}>Returns & RTO:</span>
+                  <span style={{ fontWeight: "600", color: "#f59e0b" }}>{chartData[hoveredMonthIndex].returns}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 2x2 Grid of Detailed Line Charts ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginTop: "20px" }}>
+        
+        {/* Income Line Graph Card */}
+        <div style={{ background: "var(--glass-bg)", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "20px", boxShadow: "var(--glass-shadow)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <div>
+              <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>📈 Income (Revenue) Trend</h4>
+              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>Monthly sales performance</p>
+            </div>
+            <div style={{ fontSize: "16px", color: "#10b981" }}><FaCoins /></div>
+          </div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: "#10b981", marginBottom: "10px" }}>
+            ₹{yearIncome.toLocaleString()}
+          </div>
+          {renderSparkline("income", "#10b981", true)}
+        </div>
+
+        {/* Net Profit Line Graph Card */}
+        <div style={{ background: "var(--glass-bg)", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "20px", boxShadow: "var(--glass-shadow)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <div>
+              <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>📊 Net Profit/Loss Trend</h4>
+              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>Take-home profit minus expenses</p>
+            </div>
+            <div style={{ fontSize: "16px", color: "#6366f1" }}><FaChartLine /></div>
+          </div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: yearTotal >= 0 ? "#10b981" : "#ef4444", marginBottom: "10px" }}>
+            {yearTotal >= 0 ? "₹" : "-₹"}{Math.abs(yearTotal).toLocaleString()}
+          </div>
+          {renderSparkline("profit", "#6366f1", true)}
+        </div>
+
+        {/* Total Orders Line Graph Card */}
+        <div style={{ background: "var(--glass-bg)", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "20px", boxShadow: "var(--glass-shadow)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <div>
+              <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>📦 Total Orders Trend</h4>
+              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>Volume of monthly shipments</p>
+            </div>
+            <div style={{ fontSize: "16px", color: "#0ea5e9" }}><FaBoxOpen /></div>
+          </div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: "#0ea5e9", marginBottom: "10px" }}>
+            {yearOrders.toLocaleString()} orders
+          </div>
+          {renderSparkline("orders", "#0ea5e9", false)}
+        </div>
+
+        {/* Returns & RTO Line Graph Card */}
+        <div style={{ background: "var(--glass-bg)", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "20px", boxShadow: "var(--glass-shadow)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <div>
+              <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>🔄 Returns & RTO Trend</h4>
+              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>RTO and customer return count</p>
+            </div>
+            <div style={{ fontSize: "16px", color: "#f59e0b" }}><FaFileInvoiceDollar /></div>
+          </div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: "#f59e0b", marginBottom: "10px" }}>
+            {yearReturns.toLocaleString()} returns
+          </div>
+          {renderSparkline("returns", "#f59e0b", false)}
+        </div>
+
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "2.2fr 1.2fr", gap: "24px", marginTop: "30px" }}>

@@ -1,13 +1,34 @@
 import { useState } from "react";
 import { FaStore, FaEnvelope, FaLock, FaUserPlus, FaSignInAlt, FaBoxOpen } from "react-icons/fa";
 
+// Helper: get saved emails list from localStorage
+const getSavedEmails = () => {
+  try {
+    return JSON.parse(localStorage.getItem("savedEmails") || "[]");
+  } catch {
+    return [];
+  }
+};
+
+// Helper: save a new email to the list (no duplicates)
+const saveEmailToList = (emailVal) => {
+  const lower = emailVal.trim().toLowerCase();
+  if (!lower) return;
+  const existing = getSavedEmails();
+  if (!existing.includes(lower)) {
+    existing.unshift(lower); // newest first
+    localStorage.setItem("savedEmails", JSON.stringify(existing));
+  }
+};
+
 function Login({ setToken }) {
   const [isRegister, setIsRegister] = useState(false);
   const [shopName, setShopName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => localStorage.getItem("rememberedEmail") || "");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [savedEmails] = useState(() => getSavedEmails());
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -33,6 +54,10 @@ function Login({ setToken }) {
       if (!res.ok) {
         throw new Error(data.message || "Something went wrong. Please try again.");
       }
+
+      // Store email to remember it next time + save to suggestions list
+      localStorage.setItem("rememberedEmail", email.trim().toLowerCase());
+      saveEmailToList(email);
 
       if (isRegister) {
         // Switch to login after successful registration
@@ -142,8 +167,15 @@ function Login({ setToken }) {
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 required 
+                list="saved-emails-list"
+                autoComplete="email"
                 style={{ width: "100%", paddingLeft: "42px", height: "46px" }}
               />
+              <datalist id="saved-emails-list">
+                {savedEmails.map((em) => (
+                  <option key={em} value={em} />
+                ))}
+              </datalist>
             </div>
           </div>
 

@@ -48,8 +48,8 @@ function App() {
         
         <div className="main-body animate-fade">
           <Routes>
-            <Route path="/" element={<Ledger />} />
-            <Route path="/reports" element={<Reports />} />
+            <Route path="/" element={<Reports />} />
+            <Route path="/accounts" element={<Ledger />} />
           </Routes>
         </div>
       </div>

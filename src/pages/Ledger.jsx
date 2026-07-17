@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { FaPlus, FaTrash, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice } from "react-icons/fa";
+import { useState, useEffect, useMemo } from "react";
+import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice, FaSearch, FaTimes } from "react-icons/fa";
+
 
 const INDIA_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
@@ -11,8 +12,11 @@ const INDIA_STATES = [
 
 const calculateOrderProfit = (o) => {
   const paymentStatus = o.paymentStatus || "Pending";
-  if (paymentStatus === "Pending" || paymentStatus === "Cancel" || paymentStatus === "RTO Returned") {
+  if (paymentStatus === "Pending" || paymentStatus === "RTO Returned") {
     return 0;
+  }
+  if (paymentStatus === "Cancel") {
+    return -3;
   }
   if (paymentStatus === "Return") {
     return -157;
@@ -32,6 +36,11 @@ function Ledger() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Search / Filter states
+  const [searchText, setSearchText] = useState("");
+  const [filterDate, setFilterDate] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+
   // Form states for fast entry
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // Default today
   const [orderNo, setOrderNo] = useState(""); // Meesho Order ID
@@ -43,6 +52,75 @@ function Ledger() {
   const [gst, setGst] = useState("18"); // Default 18% GST
   const [courierPartner, setCourierPartner] = useState("Valmo"); // Default Valmo courier
   const [awbId, setAwbId] = useState(""); // Airway Bill / Tracking ID
+
+  // Edit Form States
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [editDate, setEditDate] = useState("");
+  const [editOrderNo, setEditOrderNo] = useState("");
+  const [editProductName, setEditProductName] = useState("");
+  const [editCustomerState, setEditCustomerState] = useState("Gujarat");
+  const [editPurchasePrice, setEditPurchasePrice] = useState("");
+  const [editSellingPrice, setEditSellingPrice] = useState("");
+  const [editQuantity, setEditQuantity] = useState("1");
+  const [editGst, setEditGst] = useState("18");
+  const [editCourierPartner, setEditCourierPartner] = useState("Valmo");
+  const [editAwbId, setEditAwbId] = useState("");
+  const [editPaymentStatus, setEditPaymentStatus] = useState("Pending");
+
+  const startEdit = (o) => {
+    setEditingOrder(o);
+    setEditDate(new Date(o.date || o.createdAt).toISOString().slice(0, 10));
+    setEditOrderNo(o.orderNo || "");
+    setEditProductName(o.productName || o.productId?.productName || "");
+    setEditCustomerState(o.customerState || "Gujarat");
+    setEditPurchasePrice(o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || ""));
+    setEditSellingPrice(o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || ""));
+    setEditQuantity(o.quantity || "1");
+    setEditGst(o.gst || o.productId?.gst || "18");
+    setEditCourierPartner(o.courierPartner || "Valmo");
+    setEditAwbId(o.awbId || "");
+    setEditPaymentStatus(o.paymentStatus || "Pending");
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editProductName.trim() || !editPurchasePrice || !editSellingPrice) {
+      alert("Please fill in the Product Name, Purchase Price, and Selling Price.");
+      return;
+    }
+
+    try {
+      const payload = {
+        orderNo: editOrderNo.trim(),
+        awbId: editAwbId.trim(),
+        customerState: editCustomerState,
+        productName: editProductName.trim(),
+        purchasePrice: Number(editPurchasePrice),
+        sellingPrice: Number(editSellingPrice),
+        quantity: Number(editQuantity),
+        gst: Number(editGst),
+        courierPartner: editCourierPartner,
+        paymentStatus: editPaymentStatus,
+        date: new Date(editDate).toISOString()
+      };
+
+      const res = await fetch(`/api/orders/${editingOrder._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error("Failed to update entry");
+
+      setEditingOrder(null);
+      fetchOrders();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
   const handleProductNameChange = (value) => {
     setProductName(value);
@@ -231,6 +309,41 @@ function Ledger() {
 
   const stats = getLedgerStats();
 
+  // Filtered orders based on search inputs
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      // Date filter
+      if (filterDate) {
+        const orderDate = new Date(o.date || o.createdAt).toISOString().slice(0, 10);
+        if (orderDate !== filterDate) return false;
+      }
+      // Status filter
+      if (filterStatus && (o.paymentStatus || "Pending") !== filterStatus) return false;
+      // Text search (order no or product name)
+      if (searchText.trim()) {
+        const q = searchText.trim().toLowerCase();
+        const name = (o.productName || o.productId?.productName || "").toLowerCase();
+        const orderNo = (o.orderNo || "").toLowerCase();
+        const awb = (o.awbId || "").toLowerCase();
+        if (!name.includes(q) && !orderNo.includes(q) && !awb.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [orders, filterDate, filterStatus, searchText]);
+
+  // Stats for filtered results
+  const filteredStats = useMemo(() => {
+    let totalQty = 0, totalProfit = 0;
+    filteredOrders.forEach((o) => {
+      totalQty += o.quantity || 1;
+      totalProfit += calculateOrderProfit(o);
+    });
+    return { totalQty, totalProfit };
+  }, [filteredOrders]);
+
+  const hasFilter = filterDate || filterStatus || searchText.trim();
+  const clearFilters = () => { setSearchText(""); setFilterDate(""); setFilterStatus(""); };
+
   return (
     <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 10px" }}>
       <div className="page-header" style={{ marginBottom: "24px" }}>
@@ -255,6 +368,107 @@ function Ledger() {
         </div>
       )}
 
+
+      {/* Search & Filter Bar */}
+      <div style={{
+        background: "var(--glass-bg)",
+        border: "1px solid var(--border-color)",
+        borderRadius: "12px",
+        padding: "16px 20px",
+        marginBottom: "20px",
+        display: "flex",
+        gap: "12px",
+        alignItems: "center",
+        flexWrap: "wrap"
+      }}>
+        {/* Text Search */}
+        <div style={{ position: "relative", flex: "1", minWidth: "200px" }}>
+          <FaSearch style={{ position: "absolute", left: "12px", top: "11px", color: "var(--text-muted)", fontSize: "13px" }} />
+          <input
+            type="text"
+            placeholder="Search by Product Name, Order No, AWB..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{ width: "100%", paddingLeft: "36px", height: "38px", fontSize: "13px" }}
+          />
+        </div>
+
+        {/* Date Filter */}
+        <div style={{ position: "relative" }}>
+          <FaCalendarAlt style={{ position: "absolute", left: "10px", top: "11px", color: "var(--text-muted)", fontSize: "12px" }} />
+          <input
+            type="date"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            max={new Date().toISOString().slice(0, 10)}
+            style={{ paddingLeft: "32px", height: "38px", fontSize: "13px", width: "170px" }}
+            title="Filter by Date"
+          />
+        </div>
+
+        {/* Status Filter */}
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          style={{ height: "38px", fontSize: "13px", padding: "0 12px", minWidth: "140px" }}
+        >
+          <option value="">All Status</option>
+          <option value="Pending">Pending</option>
+          <option value="Complete">Complete</option>
+          <option value="Cancel">Cancel</option>
+          <option value="RTO Returned">RTO Returned</option>
+          <option value="Return">Return</option>
+        </select>
+
+        {/* Clear Button */}
+        {hasFilter && (
+          <button
+            onClick={clearFilters}
+            style={{
+              height: "38px", padding: "0 14px", borderRadius: "8px", fontSize: "13px",
+              background: "rgba(239,68,68,0.1)", color: "var(--danger)",
+              border: "1px solid rgba(239,68,68,0.2)", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: "6px"
+            }}
+          >
+            <FaTimes /> Clear
+          </button>
+        )}
+
+        {/* Summary Badge (Always Visible, no scrolling required) */}
+        <div style={{
+          marginLeft: "auto",
+          background: "rgba(255, 255, 255, 0.03)",
+          border: "1px solid var(--border-color)",
+          borderRadius: "8px",
+          padding: "6px 14px",
+          fontSize: "13px",
+          color: "var(--text-secondary)",
+          fontWeight: "600",
+          whiteSpace: "nowrap",
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+        }}>
+          {hasFilter ? (
+            <>
+              <span style={{ color: "var(--text-muted)", fontSize: "11px", fontWeight: "700", textTransform: "uppercase" }}>Filtered</span>
+              <span>Orders: <strong style={{ color: "var(--primary)" }}>{filteredOrders.length}</strong></span>
+              <span>Qty: <strong style={{ color: "#f59e0b" }}>{filteredStats.totalQty}</strong></span>
+              <span>Profit: <strong style={{ color: filteredStats.totalProfit >= 0 ? "var(--success)" : "var(--danger)" }}>₹{filteredStats.totalProfit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+            </>
+          ) : (
+            <>
+              <span style={{ color: "var(--text-muted)", fontSize: "11px", fontWeight: "700", textTransform: "uppercase" }}>Total</span>
+              <span>Orders: <strong style={{ color: "var(--primary)" }}>{orders.length}</strong></span>
+              <span>Qty: <strong style={{ color: "#f59e0b" }}>{stats.totalQty}</strong></span>
+              <span>Profit: <strong style={{ color: stats.totalProfit >= 0 ? "var(--success)" : "var(--danger)" }}>₹{stats.totalProfit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Spreadsheet Quick Entry Form */}
       <form 
         onSubmit={handleAddRow} 
@@ -277,11 +491,11 @@ function Ledger() {
           {/* Row 1: General Details */}
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Date</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required style={{ width: "100%" }} />
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} required style={{ width: "100%" }} />
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Order No. / ID</label>
-            <input type="text" placeholder="e.g. 30880548..." value={orderNo} onChange={(e) => setOrderNo(e.target.value.replace(/\D/g, ""))} style={{ width: "100%" }} />
+            <input type="text" placeholder="e.g. 30880548..." value={orderNo} onChange={(e) => setOrderNo(e.target.value.replace(/[a-zA-Z]/g, ""))} style={{ width: "100%" }} />
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Customer State</label>
@@ -347,7 +561,7 @@ function Ledger() {
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>AWB ID / Tracking No.</label>
-            <input type="text" placeholder="e.g. 1435252..." value={awbId} onChange={(e) => setAwbId(e.target.value.replace(/\D/g, ""))} style={{ width: "100%" }} />
+            <input type="text" placeholder="e.g. 1435252..." value={awbId} onChange={(e) => setAwbId(e.target.value)} style={{ width: "100%" }} />
           </div>
           <div style={{ display: "flex", alignItems: "flex-end" }}>
             <button 
@@ -408,14 +622,14 @@ function Ledger() {
               </tr>
             </thead>
             <tbody>
-              {orders.length === 0 ? (
+              {filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan="13" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
-                    No transactions logged in your accounts. Insert a row above to get started.
+                    {orders.length === 0 ? "No transactions logged in your accounts. Insert a row above to get started." : "No orders match your search/filter. Try different criteria or clear filters."}
                   </td>
                 </tr>
               ) : (
-                orders.map((o, idx) => {
+                filteredOrders.map((o, idx) => {
                   const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
                   const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
                   const gstRate = o.gst || o.productId?.gst || 0;
@@ -523,23 +737,44 @@ function Ledger() {
                         ₹{profit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
-                        <button 
-                          onClick={() => handleDeleteRow(o._id)} 
-                          style={{ 
-                            background: "none", 
-                            border: "none", 
-                            color: "rgba(239, 68, 68, 0.7)", 
-                            cursor: "pointer", 
-                            fontSize: "15px",
-                            padding: "4px 8px",
-                            borderRadius: "4px",
-                            transition: "all var(--transition-fast)"
-                          }}
-                          className="delete-btn-hover"
-                          title="Delete Row"
-                        >
-                          <FaTrash />
-                        </button>
+                        <div style={{ display: "flex", justifyContent: "center", gap: "4px", alignItems: "center" }}>
+                          <button 
+                            type="button"
+                            onClick={() => startEdit(o)}
+                            style={{ 
+                              background: "none", 
+                              border: "none", 
+                              color: "var(--primary)", 
+                              cursor: "pointer", 
+                              fontSize: "15px",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              transition: "all var(--transition-fast)"
+                            }}
+                            className="edit-btn-hover"
+                            title="Edit Row"
+                          >
+                            <FaEdit />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleDeleteRow(o._id)} 
+                            style={{ 
+                              background: "none", 
+                              border: "none", 
+                              color: "rgba(239, 68, 68, 0.7)", 
+                              cursor: "pointer", 
+                              fontSize: "15px",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              transition: "all var(--transition-fast)"
+                            }}
+                            className="delete-btn-hover"
+                            title="Delete Row"
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -582,6 +817,104 @@ function Ledger() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Edit Sale Transaction Modal */}
+      {editingOrder && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: "600px" }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Edit Sale Transaction</h3>
+              <button className="modal-close" onClick={() => setEditingOrder(null)}>&times;</button>
+            </div>
+            <form onSubmit={handleEditSubmit}>
+              <div className="form-grid">
+                <div>
+                  <label>Date</label>
+                  <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} required />
+                </div>
+                <div>
+                  <label>Order No. / ID</label>
+                  <input type="text" value={editOrderNo} onChange={(e) => setEditOrderNo(e.target.value.replace(/[a-zA-Z]/g, ""))} />
+                </div>
+                <div>
+                  <label>Customer State</label>
+                  <select value={editCustomerState} onChange={(e) => setEditCustomerState(e.target.value)}>
+                    {INDIA_STATES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label>Courier Partner</label>
+                  <select value={editCourierPartner} onChange={(e) => setEditCourierPartner(e.target.value)}>
+                    <option value="Valmo">Valmo</option>
+                    <option value="Xpressbees">Xpressbees</option>
+                    <option value="Shadowfax">Shadowfax</option>
+                    <option value="Delhivery">Delhivery</option>
+                    <option value="Ecom">Ecom</option>
+                  </select>
+                </div>
+                <div className="form-full">
+                  <label>Product Name</label>
+                  <input 
+                    type="text" 
+                    value={editProductName} 
+                    onChange={(e) => setEditProductName(e.target.value)} 
+                    list="edit-product-suggestions"
+                    required 
+                  />
+                  <datalist id="edit-product-suggestions">
+                    <option value="Air Bra (Pack of 3)" />
+                    <option value="Air Bra (Pack of 6)" />
+                    <option value="Magical Bra (Pack of 3)" />
+                    <option value="Magical Bra (Pack of 6)" />
+                  </datalist>
+                </div>
+                <div>
+                  <label>Buying Price (₹)</label>
+                  <input type="number" min="0" value={editPurchasePrice} onChange={(e) => setEditPurchasePrice(e.target.value)} required />
+                </div>
+                <div>
+                  <label>Selling Price (₹)</label>
+                  <input type="number" min="0" value={editSellingPrice} onChange={(e) => setEditSellingPrice(e.target.value)} required />
+                </div>
+                <div>
+                  <label>Quantity (Qty)</label>
+                  <input type="number" min="1" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} required />
+                </div>
+                <div>
+                  <label>GST Rate (%)</label>
+                  <select value={editGst} onChange={(e) => setEditGst(e.target.value)}>
+                    <option value="0">0% GST</option>
+                    <option value="5">5% GST</option>
+                    <option value="12">12% GST</option>
+                    <option value="18">18% GST</option>
+                    <option value="28">28% GST</option>
+                  </select>
+                </div>
+                <div className="form-full">
+                  <label>AWB ID / Tracking No.</label>
+                  <input type="text" value={editAwbId} onChange={(e) => setEditAwbId(e.target.value)} />
+                </div>
+                <div className="form-full">
+                  <label>Payment Status</label>
+                  <select value={editPaymentStatus} onChange={(e) => setEditPaymentStatus(e.target.value)}>
+                    <option value="Pending">Pending</option>
+                    <option value="Complete">Complete</option>
+                    <option value="RTO Returned">RTO Returned</option>
+                    <option value="Cancel">Cancel</option>
+                    <option value="Return">Return</option>
+                  </select>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingOrder(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save Changes</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

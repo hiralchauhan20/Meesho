@@ -20,7 +20,7 @@ function Navbar({ toggleTheme, theme }) {
       const userStr = localStorage.getItem("user");
       if (userStr) {
         const user = JSON.parse(userStr);
-        return user.name || "Active Store";
+        return user.name || "HKC Collection";
       }
     } catch (e) {
       console.error(e);
@@ -37,7 +37,7 @@ function Navbar({ toggleTheme, theme }) {
       <div className="navbar-actions">
         <div className="navbar-user" style={{ marginRight: "10px", color: "var(--text-secondary)", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
           <FaStore style={{ color: "var(--primary)" }} />
-          <span>Active Store: {getActiveStoreName()}</span>
+          <span>Store Name: {getActiveStoreName()}</span>
         </div>
 
         <div style={{ width: "1px", height: "20px", backgroundColor: "var(--border-color)", margin: "0 10px" }}></div>

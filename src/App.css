@@ -510,6 +510,11 @@
   color: rgba(239, 68, 68, 1) !important;
 }
 
+.edit-btn-hover:hover {
+  background-color: rgba(99, 102, 241, 0.15) !important;
+  color: rgba(99, 102, 241, 1) !important;
+}
+
 .logout-btn-hover:hover {
   background-color: rgba(239, 68, 68, 0.15) !important;
   border-color: rgba(239, 68, 68, 0.3) !important;

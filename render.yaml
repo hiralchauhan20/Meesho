@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: meesho-manager
+    plan: free
+    runtime: node
+    buildCommand: npm run build
+    startCommand: npm run start
+    envVars:
+      - key: MONGO_URL
+        value: mongodb+srv://hkcmeeshoseller08_db_user:aJV1o5CUiB8M6450@cluster0.0fylb9s.mongodb.net/meesho-manager?appName=Cluster0
+      - key: JWT_SECRET
+        value: meesho_manager_secret_key
+      - key: PORT
+        value: 10000

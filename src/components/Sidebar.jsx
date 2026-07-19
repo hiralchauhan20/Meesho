@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { FaTable, FaChartBar, FaBoxOpen, FaSignOutAlt, FaBriefcase, FaGithub, FaExternalLinkAlt } from "react-icons/fa";
+import { FaTable, FaChartBar, FaBoxOpen, FaSignOutAlt, FaBriefcase } from "react-icons/fa";
 
 function Sidebar({ onLogout }) {
   const location = useLocation();
@@ -27,17 +27,6 @@ function Sidebar({ onLogout }) {
         <Link to="/investments" className={isActive("/investments")}>
           <FaBriefcase /> Investments
         </Link>
-
-        <div style={{ borderTop: "1px solid var(--border-color)", margin: "16px 0 10px 0" }}></div>
-        <div style={{ fontSize: "11px", fontWeight: "600", textTransform: "uppercase", color: "var(--text-muted)", padding: "0 16px 8px 16px", letterSpacing: "0.5px" }}>Links</div>
-
-        <a href="https://github.com/hiralchauhan20/Meesho" target="_blank" rel="noopener noreferrer">
-          <FaGithub /> GitHub Repo
-        </a>
-
-        <a href="https://meesho-manager.onrender.com" target="_blank" rel="noopener noreferrer">
-          <FaExternalLinkAlt /> Render Deploy
-        </a>
       </div>
 
       {/* Sidebar Footer with Logout action */}

@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { FaPlus, FaTrash, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen } from "react-icons/fa";
+import { FaPlus, FaTrash, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen, FaExclamationTriangle, FaBoxes, FaCheckCircle } from "react-icons/fa";
 
 const calculateOrderProfit = (o) => {
-  const paymentStatus = o.paymentStatus || "Pending";
-  if (paymentStatus === "Pending" || paymentStatus === "RTO Returned") {
+  const paymentStatus = o.paymentStatus || "Complete";
+  if (paymentStatus === "RTO Returned") {
     return 0;
   }
   if (paymentStatus === "Cancel") {
@@ -23,6 +23,7 @@ const calculateOrderProfit = (o) => {
 function Reports() {
   const [expenses, setExpenses] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [stocks, setStocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -59,12 +60,20 @@ function Reports() {
       if (!ordersRes.ok) throw new Error("Failed to fetch ledger transactions");
       const ordersData = await ordersRes.json();
       setOrders(ordersData);
+
+      // Fetch stock summary
+      const stockRes = await fetch("/api/investments/stock", { headers });
+      if (stockRes.ok) {
+        const stockData = await stockRes.json();
+        setStocks(stockData);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleAddExpense = async (e) => {
     e.preventDefault();
@@ -429,6 +438,58 @@ function Reports() {
           {error}
         </div>
       )}
+
+      {/* Inventory Stock Warning Widget */}
+      {stocks.some(s => s.status === "OUT_OF_STOCK" || s.status === "LOW_STOCK") && (
+        <div style={{
+          background: "var(--glass-bg)",
+          backdropFilter: "blur(12px)",
+          borderRadius: "12px",
+          border: "1px solid var(--border-color)",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          boxShadow: "var(--glass-shadow)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "12px"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div style={{
+              background: stocks.some(s => s.status === "OUT_OF_STOCK") ? "rgba(239, 68, 68, 0.15)" : "rgba(245, 158, 11, 0.15)",
+              color: stocks.some(s => s.status === "OUT_OF_STOCK") ? "var(--danger)" : "#d97706",
+              padding: "10px",
+              borderRadius: "10px",
+              display: "flex"
+            }}>
+              <FaExclamationTriangle style={{ fontSize: "20px" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)" }}>
+                Inventory Re-Stock Alert
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                {stocks.filter(s => s.status === "OUT_OF_STOCK").length > 0 && (
+                  <span style={{ color: "var(--danger)", fontWeight: "600" }}>
+                    {stocks.filter(s => s.status === "OUT_OF_STOCK").length} product(s) Out of Stock ({stocks.filter(s => s.status === "OUT_OF_STOCK").map(s => s.productName).join(", ")})
+                  </span>
+                )}
+                {stocks.filter(s => s.status === "OUT_OF_STOCK").length > 0 && stocks.filter(s => s.status === "LOW_STOCK").length > 0 && " • "}
+                {stocks.filter(s => s.status === "LOW_STOCK").length > 0 && (
+                  <span style={{ color: "#d97706", fontWeight: "600" }}>
+                    {stocks.filter(s => s.status === "LOW_STOCK").length} product(s) Low Stock
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <a href="/investments" className="btn btn-secondary" style={{ fontSize: "12px", height: "34px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <FaBoxes /> Manage Investments & Stock
+          </a>
+        </div>
+      )}
+
 
       {/* Cumulative Stats Cards */}
       <div className="cards" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>

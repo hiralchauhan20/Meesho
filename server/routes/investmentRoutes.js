@@ -5,6 +5,7 @@ import {
   getInvestments,
   updateInvestment,
   deleteInvestment,
+  getStockSummary,
 } from "../controllers/investmentController.js";
 
 const router = express.Router();
@@ -15,6 +16,9 @@ router.post("/add", authMiddleware, addInvestment);
 // Get All Investments
 router.get("/", authMiddleware, getInvestments);
 
+// Get Live Stock Summary
+router.get("/stock", authMiddleware, getStockSummary);
+
 // Update Investment
 router.put("/:id", authMiddleware, updateInvestment);
 
@@ -22,3 +26,4 @@ router.put("/:id", authMiddleware, updateInvestment);
 router.delete("/:id", authMiddleware, deleteInvestment);
 
 export default router;
+

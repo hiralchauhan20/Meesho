@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice, FaSearch, FaTimes } from "react-icons/fa";
+import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice, FaSearch, FaTimes, FaExclamationTriangle, FaCheckCircle, FaBoxes } from "react-icons/fa";
 
 
 const INDIA_STATES = [
@@ -11,8 +11,8 @@ const INDIA_STATES = [
 ];
 
 const calculateOrderProfit = (o) => {
-  const paymentStatus = o.paymentStatus || "Pending";
-  if (paymentStatus === "Pending" || paymentStatus === "RTO Returned") {
+  const paymentStatus = o.paymentStatus || "Complete";
+  if (paymentStatus === "RTO Returned") {
     return 0;
   }
   if (paymentStatus === "Cancel") {
@@ -33,8 +33,10 @@ const calculateOrderProfit = (o) => {
 
 function Ledger() {
   const [orders, setOrders] = useState([]);
+  const [stocks, setStocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
 
   // Search / Filter states
   const [searchText, setSearchText] = useState("");
@@ -117,6 +119,7 @@ function Ledger() {
 
       setEditingOrder(null);
       fetchOrders();
+      fetchStockSummary();
     } catch (err) {
       alert(err.message);
     }
@@ -127,7 +130,11 @@ function Ledger() {
     const lower = value.toLowerCase();
     
     // Autofill Buying Price based on matching rules
-    if (lower.includes("air bra") && (lower.includes("pack of 3") || lower.includes("3 pack") || lower.includes("pack 3"))) {
+    if ((lower.includes("shapewear") || lower.includes("shapware")) && (lower.includes("pack of 2") || lower.includes("2 pack") || lower.includes("pack 2"))) {
+      setPurchasePrice("145");
+    } else if (lower.includes("shapewear") || lower.includes("shapware")) {
+      setPurchasePrice("80");
+    } else if (lower.includes("air bra") && (lower.includes("pack of 3") || lower.includes("3 pack") || lower.includes("pack 3"))) {
       setPurchasePrice("87");
     } else if (lower.includes("air bra") && (lower.includes("pack of 6") || lower.includes("6 pack") || lower.includes("pack 6"))) {
       setPurchasePrice("168");
@@ -140,7 +147,30 @@ function Ledger() {
 
   useEffect(() => {
     fetchOrders();
+    fetchStockSummary();
   }, []);
+
+  const fetchStockSummary = async () => {
+    try {
+      const res = await fetch("/api/investments/stock", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStocks(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch stock summary:", err);
+    }
+  };
+
+  const matchedStock = useMemo(() => {
+    if (!productName.trim()) return null;
+    const key = productName.trim().toLowerCase();
+    return stocks.find(s => s.productName.toLowerCase() === key || s.productName.toLowerCase().includes(key));
+  }, [productName, stocks]);
 
   const fetchOrders = async () => {
     try {
@@ -162,6 +192,7 @@ function Ledger() {
     }
   };
 
+
   const handleAddRow = async (e) => {
     e.preventDefault();
     if (!productName.trim() || !purchasePrice || !sellingPrice) {
@@ -169,10 +200,31 @@ function Ledger() {
       return;
     }
 
+    const trimmedOrderNo = orderNo.trim();
+    const trimmedAwbId = awbId.trim();
+
+    // Check duplicate Order ID in current state
+    if (trimmedOrderNo) {
+      const dupOrder = orders.find(o => o.orderNo && o.orderNo.trim().toLowerCase() === trimmedOrderNo.toLowerCase());
+      if (dupOrder) {
+        alert(`❌ Duplicate Order ID: "${trimmedOrderNo}" is already logged! Duplicate Order IDs are not allowed.`);
+        return;
+      }
+    }
+
+    // Check duplicate Tracking ID in current state
+    if (trimmedAwbId) {
+      const dupAwb = orders.find(o => o.awbId && o.awbId.trim().toLowerCase() === trimmedAwbId.toLowerCase());
+      if (dupAwb) {
+        alert(`❌ Duplicate Tracking ID: "${trimmedAwbId}" is already logged! Duplicate Tracking IDs are not allowed.`);
+        return;
+      }
+    }
+
     try {
       const payload = {
-        orderNo: orderNo.trim(),
-        awbId: awbId.trim(),
+        orderNo: trimmedOrderNo,
+        awbId: trimmedAwbId,
         customerState,
         productName: productName.trim(),
         purchasePrice: Number(purchasePrice),
@@ -181,7 +233,7 @@ function Ledger() {
         shippingCost: 0, // Set to 0 since field is removed
         gst: Number(gst),
         courierPartner,
-        paymentStatus: "Pending",
+        paymentStatus: "Complete",
         date: new Date(date).toISOString(),
         customerName: "Meesho Buyer",
         status: "Completed",
@@ -197,7 +249,11 @@ function Ledger() {
         body: JSON.stringify(payload)
       });
 
-      if (!res.ok) throw new Error("Failed to add entry to accounts");
+      if (!res.ok) {
+        const errData = await res.json();
+        alert(`❌ ${errData.message || "Failed to add entry to accounts"}`);
+        return;
+      }
 
       // Reset entry form except product name if they want to log different pricing or dates
       setOrderNo("");
@@ -211,6 +267,7 @@ function Ledger() {
       setCustomerState("Gujarat");
 
       fetchOrders();
+      fetchStockSummary();
     } catch (err) {
       alert(err.message);
     }
@@ -227,6 +284,7 @@ function Ledger() {
       if (!res.ok) throw new Error("Failed to delete entry");
 
       setOrders(orders.filter((o) => o._id !== id));
+      fetchStockSummary();
     } catch (err) {
       alert(err.message);
     }
@@ -245,10 +303,12 @@ function Ledger() {
       if (!res.ok) throw new Error("Failed to update status");
 
       setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, paymentStatus: newStatus } : o)));
+      fetchStockSummary();
     } catch (err) {
       alert(err.message);
     }
   };
+
 
   const exportCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
@@ -494,8 +554,22 @@ function Ledger() {
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} required style={{ width: "100%" }} />
           </div>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Order No. / ID</label>
-            <input type="text" placeholder="e.g. 30880548..." value={orderNo} onChange={(e) => setOrderNo(e.target.value.replace(/[a-zA-Z]/g, ""))} style={{ width: "100%" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)" }}>Order No. / ID</label>
+              {orderNo.trim() && orders.some(o => o.orderNo && o.orderNo.trim().toLowerCase() === orderNo.trim().toLowerCase()) && (
+                <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--danger)" }}>❌ Already Exists</span>
+              )}
+            </div>
+            <input 
+              type="text" 
+              placeholder="e.g. 30880548..." 
+              value={orderNo} 
+              onChange={(e) => setOrderNo(e.target.value.replace(/[a-zA-Z]/g, ""))} 
+              style={{ 
+                width: "100%", 
+                borderColor: orderNo.trim() && orders.some(o => o.orderNo && o.orderNo.trim().toLowerCase() === orderNo.trim().toLowerCase()) ? "var(--danger)" : undefined 
+              }} 
+            />
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Customer State</label>
@@ -518,7 +592,26 @@ function Ledger() {
 
           {/* Row 2: Product info */}
           <div style={{ gridColumn: "span 2" }}>
-            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Product Name</label>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)" }}>Product Name</label>
+              {matchedStock && (
+                <span style={{
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  padding: "2px 10px",
+                  borderRadius: "12px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  background: matchedStock.status === "OUT_OF_STOCK" ? "rgba(239, 68, 68, 0.15)" : matchedStock.status === "LOW_STOCK" ? "rgba(245, 158, 11, 0.15)" : "rgba(34, 197, 94, 0.15)",
+                  color: matchedStock.status === "OUT_OF_STOCK" ? "var(--danger)" : matchedStock.status === "LOW_STOCK" ? "#b45309" : "var(--success)",
+                  border: matchedStock.status === "OUT_OF_STOCK" ? "1px solid rgba(239, 68, 68, 0.3)" : matchedStock.status === "LOW_STOCK" ? "1px solid rgba(245, 158, 11, 0.3)" : "1px solid rgba(34, 197, 94, 0.3)"
+                }}>
+                  {matchedStock.status === "OUT_OF_STOCK" ? <FaExclamationTriangle /> : matchedStock.status === "LOW_STOCK" ? <FaExclamationTriangle /> : <FaCheckCircle />}
+                  {matchedStock.status === "OUT_OF_STOCK" ? "OUT OF STOCK (0 left)" : matchedStock.status === "LOW_STOCK" ? `LOW STOCK (${matchedStock.remainingPcs} left)` : `IN STOCK (${matchedStock.remainingPcs} left)`}
+                </span>
+              )}
+            </div>
             <input 
               type="text" 
               placeholder="e.g. Air Bra (Pack of 3)" 
@@ -531,8 +624,10 @@ function Ledger() {
             <datalist id="product-suggestions">
               <option value="Air Bra (Pack of 3)" />
               <option value="Air Bra (Pack of 6)" />
-              <option value="Magical Bra (Pack of 3)" />
-              <option value="Magical Bra (Pack of 6)" />
+              <option value="Megical Bra (Pack of 3)" />
+              <option value="Megical Bra (Pack of 6)" />
+              <option value="Shapewear" />
+              <option value="Shapewear (Pack of 2)" />
             </datalist>
           </div>
           <div>
@@ -560,8 +655,22 @@ function Ledger() {
             </select>
           </div>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>AWB ID / Tracking No.</label>
-            <input type="text" placeholder="e.g. 1435252..." value={awbId} onChange={(e) => setAwbId(e.target.value)} style={{ width: "100%" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)" }}>AWB ID / Tracking No.</label>
+              {awbId.trim() && orders.some(o => o.awbId && o.awbId.trim().toLowerCase() === awbId.trim().toLowerCase()) && (
+                <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--danger)" }}>❌ Already Exists</span>
+              )}
+            </div>
+            <input 
+              type="text" 
+              placeholder="e.g. 1435252..." 
+              value={awbId} 
+              onChange={(e) => setAwbId(e.target.value)} 
+              style={{ 
+                width: "100%", 
+                borderColor: awbId.trim() && orders.some(o => o.awbId && o.awbId.trim().toLowerCase() === awbId.trim().toLowerCase()) ? "var(--danger)" : undefined 
+              }} 
+            />
           </div>
           <div style={{ display: "flex", alignItems: "flex-end" }}>
             <button 

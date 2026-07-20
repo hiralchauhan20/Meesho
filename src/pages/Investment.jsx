@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
-import { FaPlus, FaTrash, FaEdit, FaFileExport, FaCalendarAlt, FaSearch, FaTimes, FaBriefcase } from "react-icons/fa";
+import { FaPlus, FaTrash, FaEdit, FaFileExport, FaCalendarAlt, FaSearch, FaTimes, FaBriefcase, FaExclamationTriangle, FaBoxes, FaCheckCircle } from "react-icons/fa";
 
 function Investment() {
   const [investments, setInvestments] = useState([]);
+  const [stocks, setStocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -17,7 +18,7 @@ function Investment() {
   const [quantity, setQuantity] = useState("1");
   const [unitType, setUnitType] = useState("Dozen"); // Dozen or Packets
   const [price, setPrice] = useState("");
-  const [status, setStatus] = useState("Pending"); // Pending or Complete
+  const [status, setStatus] = useState("Complete"); // Default Complete
 
   // Edit Form States
   const [editingInvestment, setEditingInvestment] = useState(null);
@@ -26,11 +27,13 @@ function Investment() {
   const [editQuantity, setEditQuantity] = useState("1");
   const [editUnitType, setEditUnitType] = useState("Dozen");
   const [editPrice, setEditPrice] = useState("");
-  const [editStatus, setEditStatus] = useState("Pending");
+  const [editStatus, setEditStatus] = useState("Complete");
+
 
   // Fetch investments on mount
   useEffect(() => {
     fetchInvestments();
+    fetchStockSummary();
   }, []);
 
   async function fetchInvestments() {
@@ -49,6 +52,32 @@ function Investment() {
       setLoading(false);
     }
   }
+
+  async function fetchStockSummary() {
+    try {
+      const res = await fetch("/api/investments/stock", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStocks(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch stock summary:", err);
+    }
+  }
+
+  const handleQuickRestock = (pName) => {
+    setProductName(pName);
+    const formEl = document.getElementById("investment-entry-form");
+    if (formEl) {
+      formEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
+
+
 
   // Log new investment
   const handleSubmit = async (e) => {
@@ -84,10 +113,11 @@ function Investment() {
       setQuantity("1");
       setUnitType("Dozen");
       setPrice("");
-      setStatus("Pending");
+      setStatus("Complete");
 
       // Refresh list
       fetchInvestments();
+      fetchStockSummary();
     } catch (err) {
       alert(err.message);
     }
@@ -108,6 +138,7 @@ function Investment() {
       
       // Update local state directly for responsive feel
       setInvestments(prev => prev.map(inv => inv._id === id ? { ...inv, status: newStatus } : inv));
+      fetchStockSummary();
     } catch (err) {
       alert(err.message);
     }
@@ -127,6 +158,7 @@ function Investment() {
       
       // Refresh list
       fetchInvestments();
+      fetchStockSummary();
     } catch (err) {
       alert(err.message);
     }
@@ -174,10 +206,12 @@ function Investment() {
 
       setEditingInvestment(null);
       fetchInvestments();
+      fetchStockSummary();
     } catch (err) {
       alert(err.message);
     }
   };
+
 
   // Filter logic
   const filteredInvestments = useMemo(() => {
@@ -290,6 +324,189 @@ function Investment() {
         </button>
       </div>
 
+      {/* Live Inventory & Stock Status Warning Alert */}
+      {stocks.some(s => s.status === "OUT_OF_STOCK") && (
+        <div style={{
+          background: "rgba(239, 68, 68, 0.12)",
+          border: "1px solid rgba(239, 68, 68, 0.3)",
+          borderRadius: "12px",
+          padding: "14px 20px",
+          marginBottom: "25px",
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          color: "var(--danger)",
+          boxShadow: "0 4px 12px rgba(239, 68, 68, 0.15)"
+        }}>
+          <FaExclamationTriangle style={{ fontSize: "22px", flexShrink: 0 }} />
+          <div>
+            <strong style={{ fontSize: "14px" }}>Stock Alert: Out of Stock Items Detected!</strong>
+            <p style={{ fontSize: "12px", margin: "2px 0 0 0", opacity: 0.9 }}>
+              The following products are completely out of stock based on your customer orders: {" "}
+              <b>{stocks.filter(s => s.status === "OUT_OF_STOCK").map(s => s.productName).join(", ")}</b>.
+              Please log new investments to re-stock.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Overview Table */}
+      {stocks.length > 0 && (
+        <div style={{
+          background: "var(--glass-bg)",
+          backdropFilter: "blur(12px)",
+          borderRadius: "12px",
+          border: "1px solid var(--border-color)",
+          padding: "20px",
+          marginBottom: "25px",
+          boxShadow: "var(--glass-shadow)"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <h3 style={{ fontSize: "16px", fontWeight: "600", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "10px" }}>
+              <FaBoxes style={{ color: "var(--primary)" }} /> Live Inventory & Stock Remaining
+            </h3>
+            <div style={{ display: "flex", gap: "10px", fontSize: "12px" }}>
+              <span style={{ background: "rgba(34, 197, 94, 0.1)", color: "var(--success)", padding: "4px 10px", borderRadius: "6px", fontWeight: "600" }}>
+                In Stock: {stocks.filter(s => s.status === "IN_STOCK").length}
+              </span>
+              <span style={{ background: "rgba(245, 158, 11, 0.1)", color: "#d97706", padding: "4px 10px", borderRadius: "6px", fontWeight: "600" }}>
+                Low Stock: {stocks.filter(s => s.status === "LOW_STOCK").length}
+              </span>
+              <span style={{ background: "rgba(239, 68, 68, 0.1)", color: "var(--danger)", padding: "4px 10px", borderRadius: "6px", fontWeight: "600" }}>
+                Out of Stock: {stocks.filter(s => s.status === "OUT_OF_STOCK").length}
+              </span>
+            </div>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+              <thead>
+                <tr style={{ background: "rgba(99, 102, 241, 0.04)", borderBottom: "1px solid var(--border-color)" }}>
+                  <th style={{ padding: "10px 14px", textAlign: "left", color: "var(--text-secondary)", fontWeight: "600" }}>Product Name</th>
+                  <th style={{ padding: "10px 14px", textAlign: "center", color: "var(--text-secondary)", fontWeight: "600" }}>Total Purchased</th>
+                  <th style={{ padding: "10px 14px", textAlign: "center", color: "var(--text-secondary)", fontWeight: "600" }}>Sold in Orders</th>
+                  <th style={{ padding: "10px 14px", textAlign: "center", color: "var(--text-secondary)", fontWeight: "600" }}>Stock Balance (Out of Total)</th>
+                  <th style={{ padding: "10px 14px", textAlign: "center", color: "var(--text-secondary)", fontWeight: "600" }}>Status</th>
+                  <th style={{ padding: "10px 14px", textAlign: "center", color: "var(--text-secondary)", fontWeight: "600" }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stocks.map((item, idx) => {
+                  const totalPcs = Math.max(item.totalPurchasedPcs, 1);
+                  const remPcs = Math.max(0, item.remainingPcs);
+                  const pct = Math.min(100, Math.max(0, (remPcs / totalPcs) * 100));
+
+                  const progressColor = item.status === "OUT_OF_STOCK" 
+                    ? "var(--danger)" 
+                    : item.status === "LOW_STOCK" 
+                    ? "#d97706" 
+                    : "var(--success)";
+
+                  return (
+                    <tr key={idx} style={{ 
+                      borderBottom: "1px solid var(--border-color)",
+                      background: item.status === "OUT_OF_STOCK" ? "rgba(239, 68, 68, 0.04)" : "transparent"
+                    }}>
+                      <td style={{ padding: "12px 14px", fontWeight: "600", color: "var(--text-primary)" }}>
+                        {item.productName}
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "center", color: "var(--text-primary)" }}>
+                        {item.totalPurchasedPcs} Pcs ({item.totalPurchasedDozens} Dz)
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "center", color: "var(--text-primary)", fontWeight: "500" }}>
+                        {item.totalSoldPcs} Pcs
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "center" }}>
+                        <div style={{ fontWeight: "700", fontSize: "13px", color: progressColor, marginBottom: "4px" }}>
+                          {item.remainingPcs} / {item.totalPurchasedPcs} Pcs left ({item.remainingDozens} Dz)
+                        </div>
+                        {/* Visual Progress Bar */}
+                        <div style={{ width: "120px", height: "6px", background: "rgba(255,255,255,0.1)", borderRadius: "3px", margin: "0 auto", overflow: "hidden" }}>
+                          <div style={{ width: `${pct}%`, height: "100%", background: progressColor, borderRadius: "3px", transition: "width 0.3s" }} />
+                        </div>
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "center" }}>
+                        {item.status === "OUT_OF_STOCK" ? (
+                          <span style={{
+                            background: "rgba(239, 68, 68, 0.15)",
+                            color: "var(--danger)",
+                            padding: "4px 10px",
+                            borderRadius: "20px",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            border: "1px solid rgba(239, 68, 68, 0.3)"
+                          }}>
+                            <FaExclamationTriangle /> OUT OF STOCK
+                          </span>
+                        ) : item.status === "LOW_STOCK" ? (
+                          <span style={{
+                            background: "rgba(245, 158, 11, 0.15)",
+                            color: "#b45309",
+                            padding: "4px 10px",
+                            borderRadius: "20px",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            border: "1px solid rgba(245, 158, 11, 0.3)"
+                          }}>
+                            <FaExclamationTriangle /> LOW STOCK
+                          </span>
+                        ) : (
+                          <span style={{
+                            background: "rgba(34, 197, 94, 0.15)",
+                            color: "var(--success)",
+                            padding: "4px 10px",
+                            borderRadius: "20px",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            border: "1px solid rgba(34, 197, 94, 0.3)"
+                          }}>
+                            <FaCheckCircle /> IN STOCK
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "center" }}>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickRestock(item.productName)}
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            background: item.status === "OUT_OF_STOCK" ? "var(--danger)" : "var(--primary)",
+                            color: "#fff",
+                            border: "none",
+                            boxShadow: "0 2px 6px rgba(0,0,0,0.15)"
+                          }}
+                          title="Add new stock purchase for this item"
+                        >
+                          <FaPlus style={{ fontSize: "10px" }} /> Re-Stock
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      )}
+
+
       {/* Filter / Search Bar */}
       <div 
         style={{ 
@@ -331,21 +548,10 @@ function Investment() {
           />
         </div>
 
-        {/* Status Filter */}
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          style={{ height: "38px", fontSize: "13px", padding: "0 12px", minWidth: "140px" }}
-        >
-          <option value="">All Status</option>
-          <option value="Pending">Pending</option>
-          <option value="Complete">Complete</option>
-        </select>
-
         {/* Clear Filters */}
-        {(searchText || filterDate || filterStatus) && (
+        {(searchText || filterDate) && (
           <button 
-            onClick={() => { setSearchText(""); setFilterDate(""); setFilterStatus(""); }}
+            onClick={() => { setSearchText(""); setFilterDate(""); }}
             style={{ 
               background: "none", 
               border: "none", 
@@ -370,21 +576,14 @@ function Investment() {
             <span style={{ borderLeft: "1px solid var(--border-color)", paddingLeft: "10px" }}>{stats.totalPackets} Pkt</span>
             <span style={{ borderLeft: "1px solid var(--border-color)", paddingLeft: "10px" }}>{stats.totalPcs} Pcs</span>
           </div>
-          <div style={{ background: "rgba(34, 197, 94, 0.08)", border: "1px solid rgba(34, 197, 94, 0.2)", padding: "6px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--success)" }}>
-            Complete: {stats.completeCount}
-          </div>
-          <div style={{ background: "rgba(234, 179, 8, 0.08)", border: "1px solid rgba(234, 179, 8, 0.2)", padding: "6px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "#d97706", display: "flex", gap: "8px" }}>
-            <span>Pending: {stats.pendingCount}</span>
-            <span style={{ borderLeft: "1px solid rgba(234, 179, 8, 0.2)", paddingLeft: "8px" }}>{stats.pendingDozens} Dz</span>
-            <span style={{ borderLeft: "1px solid rgba(234, 179, 8, 0.2)", paddingLeft: "8px" }}>{stats.pendingPackets} Pkt</span>
-            <span style={{ borderLeft: "1px solid rgba(234, 179, 8, 0.2)", paddingLeft: "8px" }}>{stats.pendingPcs} Pcs</span>
-          </div>
         </div>
       </div>
 
       {/* Spreadsheet Quick Entry Form */}
       <form 
+        id="investment-entry-form"
         onSubmit={handleSubmit}
+
         style={{ 
           background: "var(--glass-bg)", 
           backdropFilter: "blur(12px)", 
@@ -400,7 +599,7 @@ function Investment() {
         </h3>
         
         {/* Entry Grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 2fr 0.8fr 1fr 1.2fr 1.2fr auto", gap: "16px", alignItems: "end" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 2fr 0.8fr 1fr 1.2fr auto", gap: "16px", alignItems: "end" }}>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Date</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} required style={{ width: "100%" }} />
@@ -431,13 +630,6 @@ function Investment() {
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Price (₹)</label>
             <input type="number" min="0" placeholder="Total Cost" value={price} onChange={(e) => setPrice(e.target.value)} required style={{ width: "100%" }} />
-          </div>
-          <div>
-            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Status</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: "100%" }}>
-              <option value="Pending">Pending</option>
-              <option value="Complete">Complete</option>
-            </select>
           </div>
           <button 
             type="submit" 
@@ -481,14 +673,13 @@ function Investment() {
                 <th style={{ padding: "14px 16px", textAlign: "center", color: "var(--text-secondary)", fontWeight: "600" }}>Quantity</th>
                 <th style={{ padding: "14px 16px", textAlign: "center", color: "var(--text-secondary)", fontWeight: "600" }}>Unit Type</th>
                 <th style={{ padding: "14px 16px", textAlign: "right", color: "var(--text-secondary)", fontWeight: "600" }}>Price (₹)</th>
-                <th style={{ padding: "14px 16px", textAlign: "center", color: "var(--text-secondary)", fontWeight: "600" }}>Status</th>
                 <th style={{ padding: "14px 16px", textAlign: "center", color: "var(--text-secondary)", fontWeight: "600", width: "100px" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredInvestments.length === 0 ? (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)", fontSize: "14px" }}>No transactions logged.</td>
+                  <td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)", fontSize: "14px" }}>No transactions logged.</td>
                 </tr>
               ) : (
                 filteredInvestments.map((inv) => {
@@ -508,27 +699,6 @@ function Investment() {
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "right", color: "var(--text-primary)", fontWeight: "600" }}>
                         ₹{(inv.price || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
-                        <select 
-                          value={inv.status} 
-                          onChange={(e) => handleStatusChange(inv._id, e.target.value)}
-                          style={{
-                            padding: "4px 8px",
-                            borderRadius: "6px",
-                            fontSize: "12px",
-                            fontWeight: "600",
-                            border: "none",
-                            cursor: "pointer",
-                            width: "110px",
-                            textAlign: "center",
-                            background: inv.status === "Complete" ? "rgba(34, 197, 94, 0.12)" : "rgba(234, 179, 8, 0.12)",
-                            color: inv.status === "Complete" ? "var(--success)" : "#b45309"
-                          }}
-                        >
-                          <option value="Pending" style={{ color: "#b45309", background: "var(--card-bg)" }}>Pending</option>
-                          <option value="Complete" style={{ color: "var(--success)", background: "var(--card-bg)" }}>Complete</option>
-                        </select>
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         <div style={{ display: "flex", justifyContent: "center", gap: "4px", alignItems: "center" }}>

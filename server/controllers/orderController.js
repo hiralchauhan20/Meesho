@@ -3,7 +3,30 @@ import Order from "../models/Order.js";
 // Add Order
 export const addOrder = async (req, res) => {
   try {
-    const order = await Order.create({ ...req.body, userId: req.user.id });
+    const userId = req.user.id;
+    const { orderNo, awbId } = req.body;
+
+    // Check duplicate orderNo for this user (if orderNo provided)
+    if (orderNo && orderNo.trim()) {
+      const existingOrderNo = await Order.findOne({ userId, orderNo: orderNo.trim() });
+      if (existingOrderNo) {
+        return res.status(400).json({
+          message: `Order ID "${orderNo.trim()}" already exists! Duplicate Order IDs are not allowed.`
+        });
+      }
+    }
+
+    // Check duplicate awbId for this user (if awbId provided)
+    if (awbId && awbId.trim()) {
+      const existingAwbId = await Order.findOne({ userId, awbId: awbId.trim() });
+      if (existingAwbId) {
+        return res.status(400).json({
+          message: `Tracking ID (AWB) "${awbId.trim()}" already exists! Duplicate Tracking IDs are not allowed.`
+        });
+      }
+    }
+
+    const order = await Order.create({ ...req.body, userId });
 
     res.status(201).json({
       message: "Order Added Successfully",

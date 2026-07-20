@@ -117,8 +117,17 @@ const normalizeKey = (str) => {
   if (cleaned.includes("airbra")) {
     return "airbra";
   }
+  if (cleaned.includes("blackandcream") || (cleaned.includes("black") && cleaned.includes("cream"))) {
+    return "shapewearblackandcream";
+  }
+  if (cleaned.includes("shapewearblack") || cleaned.includes("shapeblack") || (cleaned.includes("shape") && cleaned.includes("black"))) {
+    return "shapewearblack";
+  }
+  if (cleaned.includes("shapewearcream") || cleaned.includes("shapecream") || (cleaned.includes("shape") && cleaned.includes("cream"))) {
+    return "shapewearcream";
+  }
   if (cleaned.includes("shapware") || cleaned.includes("shapewear") || cleaned.includes("shape")) {
-    return "shapewear";
+    return "shapewearblack";
   }
   if (cleaned.includes("meeshokothadi") || cleaned.includes("meeshobag") || (cleaned.includes("meesho") && cleaned.includes("kothadi"))) {
     return "meeshokothadi";
@@ -144,8 +153,14 @@ const getCanonicalProductName = (name) => {
   if (norm === "airbra") {
     return "Air Bra";
   }
-  if (norm === "shapewear") {
-    return "Shapewear";
+  if (norm === "shapewearblack") {
+    return "Shapewear Black";
+  }
+  if (norm === "shapewearcream") {
+    return "Shapewear Cream";
+  }
+  if (norm === "shapewearblackandcream") {
+    return "Shapewear Black and Cream";
   }
   if (norm === "meeshokothadi") {
     return "Meesho Kothadi";
@@ -217,14 +232,24 @@ export const getStockSummary = async (req, res) => {
       const normKey = normalizeKey(canonicalName);
       if (!normKey) return;
 
-      ensureStockEntry(normKey, canonicalName);
-
       const soldQty = Number(ord.quantity) || 1;
       const packMultiplier = getPackMultiplier(fullPName);
-      const actualPcsSold = soldQty * packMultiplier;
 
       // A. Product stock deduction
-      stockMap[normKey].totalSoldPcs += actualPcsSold;
+      if (normKey === "shapewearblackandcream") {
+        // Combo Pack: 1 Black + 1 Cream per combo
+        const blackKey = "shapewearblack";
+        const creamKey = "shapewearcream";
+        ensureStockEntry(blackKey, "Shapewear Black");
+        ensureStockEntry(creamKey, "Shapewear Cream");
+        
+        stockMap[blackKey].totalSoldPcs += soldQty;
+        stockMap[creamKey].totalSoldPcs += soldQty;
+      } else {
+        ensureStockEntry(normKey, canonicalName);
+        const actualPcsSold = soldQty * packMultiplier;
+        stockMap[normKey].totalSoldPcs += actualPcsSold;
+      }
 
       // B. Packaging Bags (Kothadi) Deduction per order:
       // 1. Always deduct 1 Meesho Kothadi per order

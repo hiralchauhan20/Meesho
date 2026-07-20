@@ -130,9 +130,9 @@ function Ledger() {
     const lower = value.toLowerCase();
     
     // Autofill Buying Price based on matching rules
-    if ((lower.includes("shapewear") || lower.includes("shapware")) && (lower.includes("pack of 2") || lower.includes("2 pack") || lower.includes("pack 2"))) {
+    if ((lower.includes("shapewear") || lower.includes("shapware") || lower.includes("shapare")) && (lower.includes("pack of 2") || lower.includes("2 pack") || lower.includes("pack 2"))) {
       setPurchasePrice("145");
-    } else if (lower.includes("shapewear") || lower.includes("shapware")) {
+    } else if (lower.includes("shapewear") || lower.includes("shapware") || lower.includes("shapare")) {
       setPurchasePrice("80");
     } else if (lower.includes("air bra") && (lower.includes("pack of 3") || lower.includes("3 pack") || lower.includes("pack 3"))) {
       setPurchasePrice("87");
@@ -625,8 +625,10 @@ function Ledger() {
               <option value="Air Bra (Pack of 6)" />
               <option value="Megical Bra (Pack of 3)" />
               <option value="Megical Bra (Pack of 6)" />
-              <option value="Shapewear" />
-              <option value="Shapewear (Pack of 2)" />
+              <option value="Shapewear Black" />
+              <option value="Shapewear Black (Pack of 2)" />
+              <option value="Shapewear Cream" />
+              <option value="Shapewear Cream (Pack of 2)" />
             </datalist>
           </div>
           <div>

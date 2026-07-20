@@ -11,8 +11,8 @@ const INDIA_STATES = [
 ];
 
 const calculateOrderProfit = (o) => {
-  const paymentStatus = o.paymentStatus || "Complete";
-  if (paymentStatus === "RTO Returned") {
+  const paymentStatus = o.paymentStatus || "Pending";
+  if (paymentStatus === "Pending" || paymentStatus === "RTO Returned") {
     return 0;
   }
   if (paymentStatus === "Cancel") {

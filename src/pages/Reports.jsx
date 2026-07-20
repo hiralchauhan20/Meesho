@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { FaPlus, FaTrash, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen, FaExclamationTriangle, FaBoxes, FaCheckCircle } from "react-icons/fa";
 
 const calculateOrderProfit = (o) => {
-  const paymentStatus = o.paymentStatus || "Complete";
-  if (paymentStatus === "RTO Returned") {
+  const paymentStatus = o.paymentStatus || "Pending";
+  if (paymentStatus === "Pending" || paymentStatus === "RTO Returned") {
     return 0;
   }
   if (paymentStatus === "Cancel") {

@@ -156,7 +156,7 @@ function Reports() {
       
       monthlyData[monthKey].orderProfit += profit;
       
-      if (payStatus === "Complete") {
+      if (payStatus === "Complete" || payStatus === "Pending") {
         monthlyData[monthKey].sales += sellingVal * qtyVal;
         monthlyData[monthKey].purchases += purchaseVal * qtyVal;
         monthlyData[monthKey].gst += gstAmount * qtyVal;
@@ -253,8 +253,8 @@ function Reports() {
         // Total Orders Count
         data[d.getMonth()].orders += 1;
 
-        // Income (Sales revenue from Completed orders)
-        if (payStatus === "Complete") {
+        // Income (Sales revenue from Pending & Completed orders)
+        if (payStatus === "Complete" || payStatus === "Pending") {
           data[d.getMonth()].income += sellingVal * qtyVal;
         }
 

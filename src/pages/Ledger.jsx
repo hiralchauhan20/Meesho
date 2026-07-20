@@ -350,7 +350,6 @@ function Ledger() {
     orders.forEach((o) => {
       const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
       const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
-      const gstRate = o.gst || o.productId?.gst || 0;
       const qtyVal = o.quantity || 1;
       
       const profit = calculateOrderProfit(o);
@@ -358,7 +357,7 @@ function Ledger() {
       
       totalQty += qtyVal;
       totalProfit += profit;
-      if (payStatus === "Complete") {
+      if (payStatus === "Complete" || payStatus === "Pending") {
         totalPurchase += purchaseVal * qtyVal;
         totalSales += sellingVal * qtyVal;
       }

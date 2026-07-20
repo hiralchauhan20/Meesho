@@ -626,9 +626,8 @@ function Ledger() {
               <option value="Megical Bra (Pack of 3)" />
               <option value="Megical Bra (Pack of 6)" />
               <option value="Shapewear Black" />
-              <option value="Shapewear Black (Pack of 2)" />
               <option value="Shapewear Cream" />
-              <option value="Shapewear Cream (Pack of 2)" />
+              <option value="Shapewear Black and Cream (Pack of 2)" />
             </datalist>
           </div>
           <div>

@@ -32,6 +32,10 @@ function Reports() {
   // Interactive Chart States
   const [activeMetric, setActiveMetric] = useState("income");
   const [hoveredMonthIndex, setHoveredMonthIndex] = useState(null);
+  
+  // Trend Cards View Mode States (Day-Wise vs Monthly)
+  const [trendViewMode, setTrendViewMode] = useState("daily"); // "daily" or "monthly"
+  const [trendMonth, setTrendMonth] = useState(new Date().getMonth()); // 0-11
 
   // Form states for extra expenses
   const [title, setTitle] = useState("");
@@ -280,6 +284,62 @@ function Reports() {
   const yearOrders = chartData.reduce((s, d) => s + d.orders, 0);
   const yearIncome = chartData.reduce((s, d) => s + d.income, 0);
   const yearReturns = chartData.reduce((s, d) => s + d.returns, 0);
+
+  // Day-wise chart data calculation
+  const getDailyChartData = () => {
+    const daysInMonth = new Date(selectedYear, trendMonth + 1, 0).getDate();
+    const data = Array.from({ length: daysInMonth }, (_, i) => ({
+      label: `${i + 1}`,
+      dateLabel: `${MONTHS[trendMonth]} ${i + 1}`,
+      profit: 0,
+      orders: 0,
+      income: 0,
+      returns: 0
+    }));
+
+    orders.forEach((o) => {
+      const d = new Date(o.date || o.createdAt);
+      if (d.getFullYear() === selectedYear && d.getMonth() === trendMonth) {
+        const dayIdx = d.getDate() - 1;
+        if (dayIdx >= 0 && dayIdx < daysInMonth) {
+          const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
+          const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
+          const qtyVal = o.quantity || 1;
+          const payStatus = o.paymentStatus || "Pending";
+
+          data[dayIdx].profit += calculateOrderProfit(o);
+          data[dayIdx].orders += 1;
+
+          if (payStatus === "Complete") {
+            data[dayIdx].income += sellingVal * qtyVal;
+          }
+
+          if (payStatus === "Return" || payStatus === "RTO Returned") {
+            data[dayIdx].returns += 1;
+          }
+        }
+      }
+    });
+
+    expenses.forEach((e) => {
+      const d = new Date(e.date || e.createdAt);
+      if (d.getFullYear() === selectedYear && d.getMonth() === trendMonth) {
+        const dayIdx = d.getDate() - 1;
+        if (dayIdx >= 0 && dayIdx < daysInMonth) {
+          data[dayIdx].profit -= Number(e.amount) || 0;
+        }
+      }
+    });
+
+    return data;
+  };
+
+  const dailyData = getDailyChartData();
+  const dailyTotalProfit = dailyData.reduce((s, d) => s + d.profit, 0);
+  const dailyTotalOrders = dailyData.reduce((s, d) => s + d.orders, 0);
+  const dailyTotalIncome = dailyData.reduce((s, d) => s + d.income, 0);
+  const dailyTotalReturns = dailyData.reduce((s, d) => s + d.returns, 0);
+
   const availableYears = getAvailableYears();
 
   // Metric configurations for line charts
@@ -337,23 +397,25 @@ function Reports() {
 
   const zeroY = activeMetric === "profit" && minVal < 0 ? 270 - ((0 - minVal) / valRange) * 230 : null;
 
-  // Reusable Sparkline Generator for the 2x2 grid
+  // Reusable Sparkline Generator for the 2x2 grid (Dynamic for Day-Wise / Monthly)
   const renderSparkline = (metric, color, isCurrency) => {
-    const values = chartData.map((d) => d[metric]);
+    const currentDataset = trendViewMode === "daily" ? dailyData : chartData;
+    const values = currentDataset.map((d) => d[metric]);
     const min = metric === "profit" ? Math.min(...values, 0) : 0;
     const max = Math.max(...values, 1);
     const range = max - min;
+    const count = values.length;
     const W = 360, H = 100, PAD_T = 10, PAD_B = 10, PAD_L = 10, PAD_R = 10;
     const innerW = W - PAD_L - PAD_R;
     const innerH = H - PAD_T - PAD_B;
 
     const points = values.map((val, i) => ({
-      x: PAD_L + (i / 11) * innerW,
+      x: PAD_L + (i / (count - 1 || 1)) * innerW,
       y: PAD_T + innerH - (range > 0 ? ((val - min) / range) * innerH : 0),
     }));
 
     const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
-    const areaPath = `${linePath} L${points[11].x},${PAD_T + innerH} L${points[0].x},${PAD_T + innerH} Z`;
+    const areaPath = `${linePath} L${points[count - 1].x},${PAD_T + innerH} L${points[0].x},${PAD_T + innerH} Z`;
     
     const gradId = `sparklineGrad-${metric}`;
 
@@ -391,7 +453,7 @@ function Reports() {
 
         {points.map((p, i) => (
           <g key={i}>
-            <circle cx={p.x} cy={p.y} r="2.5" fill={color} />
+            <circle cx={p.x} cy={p.y} r={count > 20 ? 1.8 : 2.5} fill={color} />
           </g>
         ))}
       </svg>
@@ -814,20 +876,97 @@ function Reports() {
         </div>
       </div>
 
-      {/* ── 2x2 Grid of Detailed Line Charts ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginTop: "20px" }}>
+      {/* ── 2x2 Grid Header & View Mode Switch (Day-Wise vs Monthly) ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "30px", marginBottom: "15px", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h3 style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>📊 Performance Trend Cards</h3>
+          <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "2px 0 0" }}>
+            {trendViewMode === "daily" ? `Day-wise (Daily) trend view for ${MONTHS[trendMonth]} ${selectedYear}` : `Monthly trend view for ${selectedYear}`}
+          </p>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          {trendViewMode === "daily" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)" }}>Month:</span>
+              <select
+                value={trendMonth}
+                onChange={(e) => setTrendMonth(Number(e.target.value))}
+                style={{
+                  height: "36px",
+                  padding: "0 12px",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border-color)",
+                  cursor: "pointer"
+                }}
+              >
+                {MONTHS.map((m, idx) => (
+                  <option key={m} value={idx}>{m} {selectedYear}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Toggle buttons for Day-wise vs Monthly */}
+          <div style={{ display: "flex", background: "rgba(255, 255, 255, 0.05)", padding: "3px", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+            <button
+              type="button"
+              onClick={() => setTrendViewMode("daily")}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "6px",
+                fontSize: "12px",
+                fontWeight: "700",
+                border: "none",
+                cursor: "pointer",
+                background: trendViewMode === "daily" ? "var(--primary)" : "transparent",
+                color: trendViewMode === "daily" ? "#fff" : "var(--text-secondary)",
+                transition: "all 0.2s"
+              }}
+            >
+              📅 Day-Wise (Daily)
+            </button>
+            <button
+              type="button"
+              onClick={() => setTrendViewMode("monthly")}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "6px",
+                fontSize: "12px",
+                fontWeight: "700",
+                border: "none",
+                cursor: "pointer",
+                background: trendViewMode === "monthly" ? "var(--primary)" : "transparent",
+                color: trendViewMode === "monthly" ? "#fff" : "var(--text-secondary)",
+                transition: "all 0.2s"
+              }}
+            >
+              📆 Monthly Wise
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 2x2 Grid of Detailed Line Charts (Day-Wise / Monthly) ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
         
         {/* Income Line Graph Card */}
         <div style={{ background: "var(--glass-bg)", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "20px", boxShadow: "var(--glass-shadow)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <div>
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>📈 Income (Revenue) Trend</h4>
-              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>Monthly sales performance</p>
+              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>
+                {trendViewMode === "daily" ? `Daily sales (${MONTHS[trendMonth]})` : "Monthly sales performance"}
+              </p>
             </div>
             <div style={{ fontSize: "16px", color: "#10b981" }}><FaCoins /></div>
           </div>
           <div style={{ fontSize: "20px", fontWeight: "800", color: "#10b981", marginBottom: "10px" }}>
-            ₹{yearIncome.toLocaleString()}
+            ₹{(trendViewMode === "daily" ? dailyTotalIncome : yearIncome).toLocaleString()}
           </div>
           {renderSparkline("income", "#10b981", true)}
         </div>
@@ -837,12 +976,14 @@ function Reports() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <div>
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>📊 Net Profit/Loss Trend</h4>
-              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>Take-home profit minus expenses</p>
+              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>
+                {trendViewMode === "daily" ? `Daily profit (${MONTHS[trendMonth]})` : "Take-home profit minus expenses"}
+              </p>
             </div>
             <div style={{ fontSize: "16px", color: "#6366f1" }}><FaChartLine /></div>
           </div>
-          <div style={{ fontSize: "20px", fontWeight: "800", color: yearTotal >= 0 ? "#10b981" : "#ef4444", marginBottom: "10px" }}>
-            {yearTotal >= 0 ? "₹" : "-₹"}{Math.abs(yearTotal).toLocaleString()}
+          <div style={{ fontSize: "20px", fontWeight: "800", color: (trendViewMode === "daily" ? dailyTotalProfit : yearTotal) >= 0 ? "#10b981" : "#ef4444", marginBottom: "10px" }}>
+            {(trendViewMode === "daily" ? dailyTotalProfit : yearTotal) >= 0 ? "₹" : "-₹"}{Math.abs(trendViewMode === "daily" ? dailyTotalProfit : yearTotal).toLocaleString()}
           </div>
           {renderSparkline("profit", "#6366f1", true)}
         </div>
@@ -852,12 +993,14 @@ function Reports() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <div>
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>📦 Total Orders Trend</h4>
-              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>Volume of monthly shipments</p>
+              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>
+                {trendViewMode === "daily" ? `Daily orders (${MONTHS[trendMonth]})` : "Volume of monthly shipments"}
+              </p>
             </div>
             <div style={{ fontSize: "16px", color: "#0ea5e9" }}><FaBoxOpen /></div>
           </div>
           <div style={{ fontSize: "20px", fontWeight: "800", color: "#0ea5e9", marginBottom: "10px" }}>
-            {yearOrders.toLocaleString()} orders
+            {(trendViewMode === "daily" ? dailyTotalOrders : yearOrders).toLocaleString()} orders
           </div>
           {renderSparkline("orders", "#0ea5e9", false)}
         </div>
@@ -867,12 +1010,14 @@ function Reports() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <div>
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>🔄 Returns & RTO Trend</h4>
-              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>RTO and customer return count</p>
+              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>
+                {trendViewMode === "daily" ? `Daily returns (${MONTHS[trendMonth]})` : "RTO and customer return count"}
+              </p>
             </div>
             <div style={{ fontSize: "16px", color: "#f59e0b" }}><FaFileInvoiceDollar /></div>
           </div>
           <div style={{ fontSize: "20px", fontWeight: "800", color: "#f59e0b", marginBottom: "10px" }}>
-            {yearReturns.toLocaleString()} returns
+            {(trendViewMode === "daily" ? dailyTotalReturns : yearReturns).toLocaleString()} returns
           </div>
           {renderSparkline("returns", "#f59e0b", false)}
         </div>

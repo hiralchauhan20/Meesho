@@ -357,7 +357,9 @@ function Ledger() {
       
       totalQty += qtyVal;
       totalProfit += profit;
-      if (payStatus === "Complete" || payStatus === "Pending") {
+      
+      // Income (totalSales) & totalPurchase ONLY count after order is Complete!
+      if (payStatus === "Complete") {
         totalPurchase += purchaseVal * qtyVal;
         totalSales += sellingVal * qtyVal;
       }

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { FaTable, FaChartBar, FaBoxOpen, FaSignOutAlt, FaBriefcase } from "react-icons/fa";
+import { FaTable, FaChartBar, FaBoxOpen, FaSignOutAlt, FaBriefcase, FaBullhorn } from "react-icons/fa";
 
 function Sidebar({ onLogout }) {
   const location = useLocation();
@@ -26,6 +26,10 @@ function Sidebar({ onLogout }) {
 
         <Link to="/investments" className={isActive("/investments")}>
           <FaBriefcase /> Investments
+        </Link>
+
+        <Link to="/ads" className={isActive("/ads")}>
+          <FaBullhorn /> Meesho Ads
         </Link>
       </div>
 

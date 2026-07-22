@@ -145,6 +145,7 @@ function Reports() {
           purchases: 0,
           gst: 0,
           otherExpenses: 0,
+          adsExpenses: 0,
           orderProfit: 0
         };
       }
@@ -178,19 +179,24 @@ function Reports() {
           purchases: 0,
           gst: 0,
           otherExpenses: 0,
+          adsExpenses: 0,
           orderProfit: 0
         };
       }
 
-      monthlyData[monthKey].otherExpenses += e.amount;
+      if (e.category === "Advertising") {
+        monthlyData[monthKey].adsExpenses += e.amount;
+      } else {
+        monthlyData[monthKey].otherExpenses += e.amount;
+      }
     });
 
     // Convert object to sorted array of months
     return Object.keys(monthlyData)
       .map((month) => {
         const item = monthlyData[month];
-        const totalCost = item.purchases + item.gst + item.otherExpenses;
-        const netProfit = item.orderProfit - item.otherExpenses;
+        const totalCost = item.purchases + item.gst + item.otherExpenses + item.adsExpenses;
+        const netProfit = item.orderProfit - (item.otherExpenses + item.adsExpenses);
         return {
           month,
           ...item,
@@ -209,17 +215,19 @@ function Reports() {
     let purchases = 0;
     let gst = 0;
     let otherExpenses = 0;
+    let adsExpenses = 0;
 
     monthlyList.forEach((m) => {
       sales += m.sales;
       purchases += m.purchases;
       gst += m.gst;
       otherExpenses += m.otherExpenses;
+      adsExpenses += m.adsExpenses || 0;
     });
 
-    const netProfit = sales - (purchases + gst + otherExpenses);
+    const netProfit = sales - (purchases + gst + otherExpenses + adsExpenses);
 
-    return { sales, purchases, gst, otherExpenses, netProfit };
+    return { sales, purchases, gst, otherExpenses, adsExpenses, netProfit };
   };
 
   const totals = getCumulativeTotals();
@@ -463,10 +471,10 @@ function Reports() {
   const exportCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
     csvContent += "Monthly Profit and Loss Statement - Meesho Manager\n\n";
-    csvContent += "Month,Total Sales (Revenue),Purchase Cost (COGS),GST Cost,Other Expenses,Net Profit/Loss\n";
+    csvContent += "Month,Total Sales (Revenue),Purchase Cost (COGS),GST Cost,Ads Cost,Other Expenses,Net Profit/Loss\n";
 
     monthlyList.forEach((m) => {
-      csvContent += `"${m.month}",${m.sales.toFixed(2)},${m.purchases.toFixed(2)},${m.gst.toFixed(2)},${m.otherExpenses.toFixed(2)},${m.netProfit.toFixed(2)}\n`;
+      csvContent += `"${m.month}",${m.sales.toFixed(2)},${m.purchases.toFixed(2)},${m.gst.toFixed(2)},${(m.adsExpenses || 0).toFixed(2)},${m.otherExpenses.toFixed(2)},${m.netProfit.toFixed(2)}\n`;
     });
 
     const encodedUri = encodeURI(csvContent);
@@ -1043,6 +1051,7 @@ function Reports() {
                     <th>Sales (₹)</th>
                     <th>Purchases (₹)</th>
                     <th>GST Cost (₹)</th>
+                    <th>Ads Cost (₹)</th>
                     <th>Other Exp (₹)</th>
                     <th>Net Profit (₹)</th>
                   </tr>
@@ -1050,7 +1059,7 @@ function Reports() {
                 <tbody>
                   {monthlyList.length === 0 ? (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: "center", color: "var(--text-muted)", padding: "30px" }}>
+                      <td colSpan="7" style={{ textAlign: "center", color: "var(--text-muted)", padding: "30px" }}>
                         No ledger entries found. Record sales in the Sales Ledger tab first!
                       </td>
                     </tr>
@@ -1061,6 +1070,7 @@ function Reports() {
                         <td>₹{m.sales.toLocaleString()}</td>
                         <td>₹{m.purchases.toLocaleString()}</td>
                         <td>₹{m.gst.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
+                        <td>₹{(m.adsExpenses || 0).toLocaleString()}</td>
                         <td>₹{m.otherExpenses.toLocaleString()}</td>
                         <td style={{ fontWeight: "800", fontSize: "15px", color: m.netProfit >= 0 ? "var(--success)" : "var(--danger)" }}>
                           ₹{m.netProfit.toLocaleString(undefined, { maximumFractionDigits: 1 })}
@@ -1084,12 +1094,12 @@ function Reports() {
             <div style={{ textAlign: "center", padding: "20px", color: "var(--text-secondary)" }}>Loading expenses...</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", maxHeight: "350px", overflowY: "auto" }}>
-              {expenses.length === 0 ? (
+              {expenses.filter(e => e.category !== "Advertising").length === 0 ? (
                 <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "20px", fontSize: "13px" }}>
                   No extra expenses registered.
                 </div>
               ) : (
-                expenses.map((exp) => (
+                expenses.filter(e => e.category !== "Advertising").map((exp) => (
                   <div key={exp._id} style={{ display: "flex", justify: "space-between", alignItems: "center", padding: "12px", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "6px" }}>
                     <div>
                       <div style={{ fontWeight: "600", fontSize: "13px" }}>{exp.title}</div>

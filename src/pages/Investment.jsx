@@ -608,7 +608,7 @@ function Investment() {
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Product Name</label>
             <input 
               type="text" 
-              placeholder="e.g. Cotton Fabrics" 
+              placeholder="e.g. Thank You Card, Meesho Kothadi" 
               value={productName} 
               onChange={(e) => setProductName(e.target.value)} 
               required 

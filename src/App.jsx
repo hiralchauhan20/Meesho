@@ -8,6 +8,7 @@ import Ledger from "./pages/Ledger";
 import Reports from "./pages/Reports";
 import Login from "./pages/Login";
 import Investment from "./pages/Investment";
+import MeeshoAds from "./pages/MeeshoAds";
 
 import "./App.css";
 
@@ -52,6 +53,7 @@ function App() {
             <Route path="/" element={<Reports />} />
             <Route path="/accounts" element={<Ledger />} />
             <Route path="/investments" element={<Investment />} />
+            <Route path="/ads" element={<MeeshoAds />} />
           </Routes>
         </div>
       </div>

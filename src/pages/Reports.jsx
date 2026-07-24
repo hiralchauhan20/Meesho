@@ -242,7 +242,12 @@ function Reports() {
 
   // ── Yearly chart data ──────────────────────────────────────────
   const getAvailableYears = () => {
-    const years = new Set([2025, 2026, new Date().getFullYear()]);
+    const years = new Set();
+    const currentYear = new Date().getFullYear();
+    // Add all years from 2020 to current year + 1
+    for (let y = 2020; y <= currentYear + 1; y++) {
+      years.add(y);
+    }
     orders.forEach((o) => years.add(new Date(o.date || o.createdAt).getFullYear()));
     expenses.forEach((e) => years.add(new Date(e.date || e.createdAt).getFullYear()));
     return Array.from(years).sort((a, b) => b - a);

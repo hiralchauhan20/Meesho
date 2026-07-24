@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice, FaSearch, FaTimes, FaExclamationTriangle, FaCheckCircle, FaBoxes } from "react-icons/fa";
+import ConfirmModal from "../components/ConfirmModal";
 
 
 const INDIA_STATES = [
@@ -96,6 +97,19 @@ function Ledger() {
   const [editAwbId, setEditAwbId] = useState("");
   const [editPaymentStatus, setEditPaymentStatus] = useState("Pending");
 
+  // Custom Modal States
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("Alert");
+  const [alertMessage, setAlertMessage] = useState("");
+
+  const showAlert = (message, title = "Notice") => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertOpen(true);
+  };
+
   const startEdit = (o) => {
     setEditingOrder(o);
     setEditDate(new Date(o.date || o.createdAt).toISOString().slice(0, 10));
@@ -114,7 +128,7 @@ function Ledger() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editProductName.trim() || !editPurchasePrice || !editSellingPrice) {
-      alert("Please fill in the Product Name, Purchase Price, and Selling Price.");
+      showAlert("Please fill in the Product Name, Purchase Price, and Selling Price.", "Validation Error");
       return;
     }
 
@@ -148,7 +162,7 @@ function Ledger() {
       fetchOrders();
       fetchStockSummary();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
     }
   };
 
@@ -223,7 +237,7 @@ function Ledger() {
   const handleAddRow = async (e) => {
     e.preventDefault();
     if (!productName.trim() || !purchasePrice || !sellingPrice) {
-      alert("Please fill in the Product Name, Purchase Price, and Selling Price.");
+      showAlert("Please fill in the Product Name, Purchase Price, and Selling Price.", "Validation Error");
       return;
     }
 
@@ -234,7 +248,7 @@ function Ledger() {
     if (trimmedOrderNo) {
       const dupOrder = orders.find(o => o.orderNo && o.orderNo.trim().toLowerCase() === trimmedOrderNo.toLowerCase());
       if (dupOrder) {
-        alert(`❌ Duplicate Order ID: "${trimmedOrderNo}" is already logged! Duplicate Order IDs are not allowed.`);
+        showAlert(`❌ Duplicate Order ID: "${trimmedOrderNo}" is already logged! Duplicate Order IDs are not allowed.`, "Duplicate Order ID");
         return;
       }
     }
@@ -243,7 +257,7 @@ function Ledger() {
     if (trimmedAwbId) {
       const dupAwb = orders.find(o => o.awbId && o.awbId.trim().toLowerCase() === trimmedAwbId.toLowerCase());
       if (dupAwb) {
-        alert(`❌ Duplicate Tracking ID: "${trimmedAwbId}" is already logged! Duplicate Tracking IDs are not allowed.`);
+        showAlert(`❌ Duplicate Tracking ID: "${trimmedAwbId}" is already logged! Duplicate Tracking IDs are not allowed.`, "Duplicate Tracking ID");
         return;
       }
     }
@@ -278,7 +292,7 @@ function Ledger() {
 
       if (!res.ok) {
         const errData = await res.json();
-        alert(`❌ ${errData.message || "Failed to add entry to accounts"}`);
+        showAlert(`❌ ${errData.message || "Failed to add entry to accounts"}`, "Error");
         return;
       }
 
@@ -296,13 +310,21 @@ function Ledger() {
       fetchOrders();
       fetchStockSummary();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
     }
   };
 
-  const handleDeleteRow = async (id) => {
+  const handleDeleteRow = (id) => {
+    setDeleteId(id);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setDeleteConfirmOpen(false);
+    if (!deleteId) return;
+
     try {
-      const res = await fetch(`/api/orders/${id}`, {
+      const res = await fetch(`/api/orders/${deleteId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -310,10 +332,12 @@ function Ledger() {
       });
       if (!res.ok) throw new Error("Failed to delete entry");
 
-      setOrders(orders.filter((o) => o._id !== id));
+      setOrders(orders.filter((o) => o._id !== deleteId));
       fetchStockSummary();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
+    } finally {
+      setDeleteId(null);
     }
   };
 
@@ -332,7 +356,7 @@ function Ledger() {
       setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, paymentStatus: newStatus } : o)));
       fetchStockSummary();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
     }
   };
 
@@ -1162,6 +1186,31 @@ function Ledger() {
           </div>
         </div>
       )}
+
+      {/* Custom Confirmation and Alert Modals */}
+      <ConfirmModal
+        isOpen={deleteConfirmOpen}
+        title="Delete Order Row"
+        message="Are you sure you want to delete this order entry from the sales ledger? This action cannot be undone."
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          setDeleteConfirmOpen(false);
+          setDeleteId(null);
+        }}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
+
+      <ConfirmModal
+        isOpen={alertOpen}
+        title={alertTitle}
+        message={alertMessage}
+        onConfirm={() => setAlertOpen(false)}
+        isAlert={true}
+        type="info"
+      />
+
     </div>
   );
 }

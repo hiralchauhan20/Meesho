@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { FaPlus, FaTrash, FaEdit, FaFileExport, FaCalendarAlt, FaSearch, FaTimes, FaBriefcase, FaExclamationTriangle, FaBoxes, FaCheckCircle } from "react-icons/fa";
+import ConfirmModal from "../components/ConfirmModal";
 
 function Investment() {
   const [investments, setInvestments] = useState([]);
@@ -28,6 +29,19 @@ function Investment() {
   const [editUnitType, setEditUnitType] = useState("Dozen");
   const [editPrice, setEditPrice] = useState("");
   const [editStatus, setEditStatus] = useState("Complete");
+
+  // Custom Modal States
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("Alert");
+  const [alertMessage, setAlertMessage] = useState("");
+
+  const showAlert = (message, title = "Notice") => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertOpen(true);
+  };
 
 
   // Fetch investments on mount
@@ -83,7 +97,7 @@ function Investment() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!productName.trim() || !price || !quantity) {
-      alert("Please fill in Product Name, Quantity, and Price.");
+      showAlert("Please fill in Product Name, Quantity, and Price.", "Validation Error");
       return;
     }
 
@@ -119,7 +133,7 @@ function Investment() {
       fetchInvestments();
       fetchStockSummary();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
     }
   };
 
@@ -140,15 +154,22 @@ function Investment() {
       setInvestments(prev => prev.map(inv => inv._id === id ? { ...inv, status: newStatus } : inv));
       fetchStockSummary();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
     }
   };
 
   // Delete investment row
-  const handleDeleteRow = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this investment transaction?")) return;
+  const handleDeleteRow = (id) => {
+    setDeleteId(id);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setDeleteConfirmOpen(false);
+    if (!deleteId) return;
+
     try {
-      const res = await fetch(`/api/investments/${id}`, {
+      const res = await fetch(`/api/investments/${deleteId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -160,7 +181,9 @@ function Investment() {
       fetchInvestments();
       fetchStockSummary();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
+    } finally {
+      setDeleteId(null);
     }
   };
 
@@ -179,7 +202,7 @@ function Investment() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editProductName.trim() || !editQuantity || !editPrice) {
-      alert("Please fill in Product Name, Quantity, and Price.");
+      showAlert("Please fill in Product Name, Quantity, and Price.", "Validation Error");
       return;
     }
 
@@ -208,7 +231,7 @@ function Investment() {
       fetchInvestments();
       fetchStockSummary();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
     }
   };
 
@@ -836,6 +859,31 @@ function Investment() {
           </div>
         </div>
       )}
+
+      {/* Custom Confirmation and Alert Modals */}
+      <ConfirmModal
+        isOpen={deleteConfirmOpen}
+        title="Delete Investment Log"
+        message="Are you sure you want to delete this investment transaction? This action cannot be undone."
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          setDeleteConfirmOpen(false);
+          setDeleteId(null);
+        }}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
+
+      <ConfirmModal
+        isOpen={alertOpen}
+        title={alertTitle}
+        message={alertMessage}
+        onConfirm={() => setAlertOpen(false)}
+        isAlert={true}
+        type="info"
+      />
+
     </div>
   );
 }

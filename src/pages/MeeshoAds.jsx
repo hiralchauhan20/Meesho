@@ -11,6 +11,7 @@ import {
   FaChartLine, 
   FaCalculator 
 } from "react-icons/fa";
+import ConfirmModal from "../components/ConfirmModal";
 
 function MeeshoAds() {
   const [ads, setAds] = useState([]);
@@ -33,6 +34,19 @@ function MeeshoAds() {
   const [editAmount, setEditAmount] = useState("");
   const [editNote, setEditNote] = useState("");
   const [updating, setUpdating] = useState(false);
+
+  // Custom Modal States
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("Alert");
+  const [alertMessage, setAlertMessage] = useState("");
+
+  const showAlert = (message, title = "Notice") => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertOpen(true);
+  };
 
   // Fetch ads on mount
   useEffect(() => {
@@ -63,7 +77,7 @@ function MeeshoAds() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!amount || Number(amount) <= 0) {
-      alert("Please enter a valid ads amount.");
+      showAlert("Please enter a valid ads amount.", "Validation Error");
       return;
     }
 
@@ -93,7 +107,7 @@ function MeeshoAds() {
       // Refresh list
       await fetchAds();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
     } finally {
       setSaving(false);
     }
@@ -111,7 +125,7 @@ function MeeshoAds() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editAmount || Number(editAmount) <= 0) {
-      alert("Please enter a valid ads amount.");
+      showAlert("Please enter a valid ads amount.", "Validation Error");
       return;
     }
 
@@ -136,18 +150,24 @@ function MeeshoAds() {
       setEditingAd(null);
       await fetchAds();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
     } finally {
       setUpdating(false);
     }
   };
 
   // Delete ads log
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this ads entry?")) return;
+  const handleDelete = (id) => {
+    setDeleteId(id);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setDeleteConfirmOpen(false);
+    if (!deleteId) return;
 
     try {
-      const res = await fetch(`/api/expenses/${id}`, {
+      const res = await fetch(`/api/expenses/${deleteId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -156,7 +176,9 @@ function MeeshoAds() {
       if (!res.ok) throw new Error("Failed to delete ads entry");
       await fetchAds();
     } catch (err) {
-      alert(err.message);
+      showAlert(err.message, "Error");
+    } finally {
+      setDeleteId(null);
     }
   };
 
@@ -631,6 +653,30 @@ function MeeshoAds() {
           </div>
         </div>
       )}
+
+      {/* Custom Confirmation and Alert Modals */}
+      <ConfirmModal
+        isOpen={deleteConfirmOpen}
+        title="Delete Ads Entry"
+        message="Are you sure you want to delete this ads entry? This action cannot be undone."
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          setDeleteConfirmOpen(false);
+          setDeleteId(null);
+        }}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
+
+      <ConfirmModal
+        isOpen={alertOpen}
+        title={alertTitle}
+        message={alertMessage}
+        onConfirm={() => setAlertOpen(false)}
+        isAlert={true}
+        type="info"
+      />
 
     </div>
   );

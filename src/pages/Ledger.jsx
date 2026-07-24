@@ -1045,7 +1045,7 @@ function Ledger() {
                   <td style={{ padding: "16px", textAlign: "center", fontSize: "13px", color: "var(--text-primary)" }}>
                     {stats.totalQty}
                   </td>
-                  <td colSpan="2" style={{ padding: "16px" }}></td>
+                  <td colSpan="3" style={{ padding: "16px" }}></td>
                   <td 
                     style={{ 
                       padding: "16px", 

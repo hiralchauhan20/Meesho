@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { FaPlus, FaTrash, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen, FaExclamationTriangle, FaBoxes, FaCheckCircle } from "react-icons/fa";
 
 const calculateOrderProfit = (o) => {
@@ -209,6 +209,14 @@ function Reports() {
 
   const monthlyList = getMonthlyBreakdown();
 
+  const filteredMonthlyList = useMemo(() => {
+    return monthlyList.filter((m) => {
+      const parts = m.month.split(" ");
+      const year = Number(parts[parts.length - 1]);
+      return year === selectedYear;
+    });
+  }, [monthlyList, selectedYear]);
+
   // Cumulative totals
   const getCumulativeTotals = () => {
     let sales = 0;
@@ -234,7 +242,7 @@ function Reports() {
 
   // ── Yearly chart data ──────────────────────────────────────────
   const getAvailableYears = () => {
-    const years = new Set();
+    const years = new Set([2025, 2026, new Date().getFullYear()]);
     orders.forEach((o) => years.add(new Date(o.date || o.createdAt).getFullYear()));
     expenses.forEach((e) => years.add(new Date(e.date || e.createdAt).getFullYear()));
     return Array.from(years).sort((a, b) => b - a);
@@ -1057,14 +1065,14 @@ function Reports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {monthlyList.length === 0 ? (
+                  {filteredMonthlyList.length === 0 ? (
                     <tr>
                       <td colSpan="7" style={{ textAlign: "center", color: "var(--text-muted)", padding: "30px" }}>
-                        No ledger entries found. Record sales in the Sales Ledger tab first!
+                        No ledger entries found for {selectedYear}. Record sales in the Sales Ledger tab first!
                       </td>
                     </tr>
                   ) : (
-                    monthlyList.map((m, index) => (
+                    filteredMonthlyList.map((m, index) => (
                       <tr key={index}>
                         <td style={{ fontWeight: "700", color: "var(--text-primary)" }}>{m.month}</td>
                         <td>₹{m.sales.toLocaleString()}</td>

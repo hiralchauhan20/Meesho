@@ -908,27 +908,52 @@ function Reports() {
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           {trendViewMode === "daily" && (
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)" }}>Month:</span>
-              <select
-                value={trendMonth}
-                onChange={(e) => setTrendMonth(Number(e.target.value))}
-                style={{
-                  height: "36px",
-                  padding: "0 12px",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  background: "var(--bg-secondary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border-color)",
-                  cursor: "pointer"
-                }}
-              >
-                {MONTHS.map((m, idx) => (
-                  <option key={m} value={idx}>{m} {selectedYear}</option>
-                ))}
-              </select>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)" }}>Month:</span>
+                <select
+                  value={trendMonth}
+                  onChange={(e) => setTrendMonth(Number(e.target.value))}
+                  style={{
+                    height: "36px",
+                    padding: "0 12px",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    background: "var(--bg-secondary)",
+                    color: "var(--text-primary)",
+                    border: "1px solid var(--border-color)",
+                    cursor: "pointer"
+                  }}
+                >
+                  {MONTHS.map((m, idx) => (
+                    <option key={m} value={idx}>{m}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)" }}>Year:</span>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  style={{
+                    height: "36px",
+                    padding: "0 12px",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    background: "var(--bg-secondary)",
+                    color: "var(--text-primary)",
+                    border: "1px solid var(--border-color)",
+                    cursor: "pointer"
+                  }}
+                >
+                  {(availableYears.length > 0 ? availableYears : [new Date().getFullYear()]).map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 

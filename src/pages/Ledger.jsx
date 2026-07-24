@@ -39,9 +39,10 @@ function Ledger() {
 
 
   // Search / Filter states
-  const [searchText, setSearchText] = useState("");
+  const [filterProduct, setFilterProduct] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterCourier, setFilterCourier] = useState("");
 
   // Form states for fast entry
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // Default today
@@ -370,6 +371,14 @@ function Ledger() {
 
   const stats = getLedgerStats();
 
+  // Get unique products for filtering
+  const [uniqueProducts, setUniqueProducts] = useState([]);
+
+  useEffect(() => {
+    const prods = orders.map(o => o.productName || o.productId?.productName || "Unknown Product");
+    setUniqueProducts(Array.from(new Set(prods)).filter(Boolean).sort());
+  }, [orders]);
+
   // Filtered orders based on search inputs
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
@@ -380,17 +389,19 @@ function Ledger() {
       }
       // Status filter
       if (filterStatus && (o.paymentStatus || "Pending") !== filterStatus) return false;
-      // Text search (order no or product name)
-      if (searchText.trim()) {
-        const q = searchText.trim().toLowerCase();
-        const name = (o.productName || o.productId?.productName || "").toLowerCase();
-        const orderNo = (o.orderNo || "").toLowerCase();
-        const awb = (o.awbId || "").toLowerCase();
-        if (!name.includes(q) && !orderNo.includes(q) && !awb.includes(q)) return false;
+      // Product filter
+      if (filterProduct) {
+        const prodName = o.productName || o.productId?.productName || "Unknown Product";
+        if (prodName !== filterProduct) return false;
+      }
+      // Courier Partner filter
+      if (filterCourier) {
+        const courier = o.courierPartner || "Valmo";
+        if (courier !== filterCourier) return false;
       }
       return true;
     });
-  }, [orders, filterDate, filterStatus, searchText]);
+  }, [orders, filterDate, filterStatus, filterProduct, filterCourier]);
 
   // Stats for filtered results
   const filteredStats = useMemo(() => {
@@ -402,8 +413,13 @@ function Ledger() {
     return { totalQty, totalProfit };
   }, [filteredOrders]);
 
-  const hasFilter = filterDate || filterStatus || searchText.trim();
-  const clearFilters = () => { setSearchText(""); setFilterDate(""); setFilterStatus(""); };
+  const hasFilter = filterDate || filterStatus || filterProduct || filterCourier;
+  const clearFilters = () => {
+    setFilterProduct("");
+    setFilterDate("");
+    setFilterStatus("");
+    setFilterCourier("");
+  };
 
   return (
     <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 10px" }}>
@@ -442,17 +458,17 @@ function Ledger() {
         alignItems: "center",
         flexWrap: "wrap"
       }}>
-        {/* Text Search */}
-        <div style={{ position: "relative", flex: "1", minWidth: "200px" }}>
-          <FaSearch style={{ position: "absolute", left: "12px", top: "11px", color: "var(--text-muted)", fontSize: "13px" }} />
-          <input
-            type="text"
-            placeholder="Search by Product Name, Order No, AWB..."
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            style={{ width: "100%", paddingLeft: "36px", height: "38px", fontSize: "13px" }}
-          />
-        </div>
+        {/* Product Filter */}
+        <select
+          value={filterProduct}
+          onChange={(e) => setFilterProduct(e.target.value)}
+          style={{ height: "38px", fontSize: "13px", padding: "0 12px", minWidth: "160px", flex: "1" }}
+        >
+          <option value="">All Products</option>
+          {uniqueProducts.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
 
         {/* Date Filter */}
         <div style={{ position: "relative" }}>
@@ -479,6 +495,20 @@ function Ledger() {
           <option value="Cancel">Cancel</option>
           <option value="RTO Returned">RTO Returned</option>
           <option value="Return">Return</option>
+        </select>
+
+        {/* Courier Partner Filter */}
+        <select
+          value={filterCourier}
+          onChange={(e) => setFilterCourier(e.target.value)}
+          style={{ height: "38px", fontSize: "13px", padding: "0 12px", minWidth: "160px" }}
+        >
+          <option value="">All Couriers</option>
+          <option value="Valmo">Valmo</option>
+          <option value="Xpressbees">Xpressbees</option>
+          <option value="Shadowfax">Shadowfax</option>
+          <option value="Delhivery">Delhivery</option>
+          <option value="Ecom">Ecom</option>
         </select>
 
         {/* Clear Button */}

@@ -172,9 +172,9 @@ function Ledger() {
     
     // Autofill Buying Price based on matching rules
     if ((lower.includes("shapewear") || lower.includes("shapware") || lower.includes("shapare")) && (lower.includes("pack of 2") || lower.includes("2 pack") || lower.includes("pack 2"))) {
-      setPurchasePrice("145");
+      setPurchasePrice("170");
     } else if (lower.includes("shapewear") || lower.includes("shapware") || lower.includes("shapare")) {
-      setPurchasePrice("80");
+      setPurchasePrice("86");
     } else if (lower.includes("air bra") && (lower.includes("pack of 3") || lower.includes("3 pack") || lower.includes("pack 3"))) {
       setPurchasePrice("87");
     } else if (lower.includes("air bra") && (lower.includes("pack of 6") || lower.includes("6 pack") || lower.includes("pack 6"))) {

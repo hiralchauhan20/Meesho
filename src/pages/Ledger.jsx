@@ -10,6 +10,18 @@ const INDIA_STATES = [
   "West Bengal", "Delhi", "Jammu & Kashmir", "Other UT"
 ];
 
+const FILTER_PRODUCTS = [
+  "Air Bra (Pack of 3)",
+  "Air Bra (Pack of 6)",
+  "Megical Bra (Pack of 3)",
+  "Megical Bra (Pack of 6)",
+  "Shapewear Black",
+  "Shapewear Black (Pack of 2)",
+  "Shapewear Cream",
+  "Shapewear Cream (Pack of 2)",
+  "Shapewear Black and Cream (Pack of 2)"
+];
+
 const calculateOrderProfit = (o) => {
   const paymentStatus = o.paymentStatus || "Pending";
   if (paymentStatus === "Pending" || paymentStatus === "RTO Returned") {
@@ -371,14 +383,6 @@ function Ledger() {
 
   const stats = getLedgerStats();
 
-  // Get unique products for filtering
-  const [uniqueProducts, setUniqueProducts] = useState([]);
-
-  useEffect(() => {
-    const prods = orders.map(o => o.productName || o.productId?.productName || "Unknown Product");
-    setUniqueProducts(Array.from(new Set(prods)).filter(Boolean).sort());
-  }, [orders]);
-
   // Filtered orders based on search inputs
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
@@ -391,8 +395,8 @@ function Ledger() {
       if (filterStatus && (o.paymentStatus || "Pending") !== filterStatus) return false;
       // Product filter
       if (filterProduct) {
-        const prodName = o.productName || o.productId?.productName || "Unknown Product";
-        if (prodName !== filterProduct) return false;
+        const prodName = (o.productName || o.productId?.productName || "Unknown Product").trim().toLowerCase();
+        if (prodName !== filterProduct.trim().toLowerCase()) return false;
       }
       // Courier Partner filter
       if (filterCourier) {
@@ -465,7 +469,7 @@ function Ledger() {
           style={{ height: "38px", fontSize: "13px", padding: "0 12px", minWidth: "160px", flex: "1" }}
         >
           <option value="">All Products</option>
-          {uniqueProducts.map((p) => (
+          {FILTER_PRODUCTS.map((p) => (
             <option key={p} value={p}>{p}</option>
           ))}
         </select>

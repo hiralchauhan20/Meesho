@@ -55,6 +55,7 @@ function Ledger() {
   const [filterDate, setFilterDate] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCourier, setFilterCourier] = useState("");
+  const [filterCustomerState, setFilterCustomerState] = useState("");
 
   // Form states for fast entry
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // Default today
@@ -403,9 +404,14 @@ function Ledger() {
         const courier = o.courierPartner || "Valmo";
         if (courier !== filterCourier) return false;
       }
+      // Customer State filter
+      if (filterCustomerState) {
+        const stateName = o.customerState || "Gujarat";
+        if (stateName !== filterCustomerState) return false;
+      }
       return true;
     });
-  }, [orders, filterDate, filterStatus, filterProduct, filterCourier]);
+  }, [orders, filterDate, filterStatus, filterProduct, filterCourier, filterCustomerState]);
 
   // Stats for filtered results
   const filteredStats = useMemo(() => {
@@ -417,12 +423,13 @@ function Ledger() {
     return { totalQty, totalProfit };
   }, [filteredOrders]);
 
-  const hasFilter = filterDate || filterStatus || filterProduct || filterCourier;
+  const hasFilter = filterDate || filterStatus || filterProduct || filterCourier || filterCustomerState;
   const clearFilters = () => {
     setFilterProduct("");
     setFilterDate("");
     setFilterStatus("");
     setFilterCourier("");
+    setFilterCustomerState("");
   };
 
   return (
@@ -455,112 +462,164 @@ function Ledger() {
         background: "var(--glass-bg)",
         border: "1px solid var(--border-color)",
         borderRadius: "12px",
-        padding: "16px 20px",
+        padding: "20px",
         marginBottom: "20px",
-        display: "flex",
-        gap: "12px",
-        alignItems: "center",
-        flexWrap: "wrap"
+        boxShadow: "var(--glass-shadow)"
       }}>
-        {/* Product Filter */}
-        <select
-          value={filterProduct}
-          onChange={(e) => setFilterProduct(e.target.value)}
-          style={{ height: "38px", fontSize: "13px", padding: "0 12px", minWidth: "160px", flex: "1" }}
-        >
-          <option value="">All Products</option>
-          {FILTER_PRODUCTS.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
+        {/* Filter Inputs Grid */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: "16px",
+          alignItems: "flex-end"
+        }}>
+          {/* Product Filter */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Product Name</label>
+            <select
+              value={filterProduct}
+              onChange={(e) => setFilterProduct(e.target.value)}
+              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+            >
+              <option value="">All Products</option>
+              {FILTER_PRODUCTS.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
 
-        {/* Date Filter */}
-        <div style={{ position: "relative" }}>
-          <FaCalendarAlt style={{ position: "absolute", left: "10px", top: "11px", color: "var(--text-muted)", fontSize: "12px" }} />
-          <input
-            type="date"
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            max={new Date().toISOString().slice(0, 10)}
-            style={{ paddingLeft: "32px", height: "38px", fontSize: "13px", width: "170px" }}
-            title="Filter by Date"
-          />
+          {/* Date Filter */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Order Date</label>
+            <div style={{ position: "relative" }}>
+              <FaCalendarAlt style={{ position: "absolute", left: "10px", top: "11px", color: "var(--text-muted)", fontSize: "12px" }} />
+              <input
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                max={new Date().toISOString().slice(0, 10)}
+                style={{ paddingLeft: "32px", height: "38px", fontSize: "13px" }}
+                title="Filter by Date"
+              />
+            </div>
+          </div>
+
+          {/* Status Filter */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Payment Status</label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+            >
+              <option value="">All Status</option>
+              <option value="Pending">Pending</option>
+              <option value="Complete">Complete</option>
+              <option value="Cancel">Cancel</option>
+              <option value="RTO Returned">RTO Returned</option>
+              <option value="Return">Return</option>
+            </select>
+          </div>
+
+          {/* Courier Partner Filter */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Courier Partner</label>
+            <select
+              value={filterCourier}
+              onChange={(e) => setFilterCourier(e.target.value)}
+              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+            >
+              <option value="">All Couriers</option>
+              <option value="Valmo">Valmo</option>
+              <option value="Xpressbees">Xpressbees</option>
+              <option value="Shadowfax">Shadowfax</option>
+              <option value="Delhivery">Delhivery</option>
+              <option value="Ecom">Ecom</option>
+            </select>
+          </div>
+
+          {/* Customer State Filter */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Customer State</label>
+            <select
+              value={filterCustomerState}
+              onChange={(e) => setFilterCustomerState(e.target.value)}
+              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+            >
+              <option value="">All States</option>
+              {INDIA_STATES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Clear Button Container */}
+          <div style={{ display: "flex", alignItems: "flex-end", height: "38px" }}>
+            {hasFilter && (
+              <button
+                onClick={clearFilters}
+                style={{
+                  height: "38px", padding: "0 14px", borderRadius: "8px", fontSize: "13px",
+                  background: "rgba(239,68,68,0.1)", color: "var(--danger)",
+                  border: "1px solid rgba(239,68,68,0.2)", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: "6px", width: "100%", justifyContent: "center"
+                }}
+              >
+                <FaTimes /> Clear Filters
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Status Filter */}
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          style={{ height: "38px", fontSize: "13px", padding: "0 12px", minWidth: "140px" }}
-        >
-          <option value="">All Status</option>
-          <option value="Pending">Pending</option>
-          <option value="Complete">Complete</option>
-          <option value="Cancel">Cancel</option>
-          <option value="RTO Returned">RTO Returned</option>
-          <option value="Return">Return</option>
-        </select>
-
-        {/* Courier Partner Filter */}
-        <select
-          value={filterCourier}
-          onChange={(e) => setFilterCourier(e.target.value)}
-          style={{ height: "38px", fontSize: "13px", padding: "0 12px", minWidth: "160px" }}
-        >
-          <option value="">All Couriers</option>
-          <option value="Valmo">Valmo</option>
-          <option value="Xpressbees">Xpressbees</option>
-          <option value="Shadowfax">Shadowfax</option>
-          <option value="Delhivery">Delhivery</option>
-          <option value="Ecom">Ecom</option>
-        </select>
-
-        {/* Clear Button */}
-        {hasFilter && (
-          <button
-            onClick={clearFilters}
-            style={{
-              height: "38px", padding: "0 14px", borderRadius: "8px", fontSize: "13px",
-              background: "rgba(239,68,68,0.1)", color: "var(--danger)",
-              border: "1px solid rgba(239,68,68,0.2)", cursor: "pointer",
-              display: "flex", alignItems: "center", gap: "6px"
-            }}
-          >
-            <FaTimes /> Clear
-          </button>
-        )}
-
-        {/* Summary Badge (Always Visible, no scrolling required) */}
+        {/* Stats Summary Panel */}
         <div style={{
-          marginLeft: "auto",
-          background: "rgba(255, 255, 255, 0.03)",
-          border: "1px solid var(--border-color)",
-          borderRadius: "8px",
-          padding: "6px 14px",
-          fontSize: "13px",
-          color: "var(--text-secondary)",
-          fontWeight: "600",
-          whiteSpace: "nowrap",
+          marginTop: "16px",
+          paddingTop: "12px",
+          borderTop: "1px solid var(--border-color)",
           display: "flex",
           alignItems: "center",
-          gap: "12px",
-          boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "12px"
         }}>
-          {hasFilter ? (
-            <>
-              <span style={{ color: "var(--text-muted)", fontSize: "11px", fontWeight: "700", textTransform: "uppercase" }}>Filtered</span>
-              <span>Orders: <strong style={{ color: "var(--primary)" }}>{filteredOrders.length}</strong></span>
-              <span>Qty: <strong style={{ color: "#f59e0b" }}>{filteredStats.totalQty}</strong></span>
-              <span>Profit: <strong style={{ color: filteredStats.totalProfit >= 0 ? "var(--success)" : "var(--danger)" }}>₹{filteredStats.totalProfit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-            </>
-          ) : (
-            <>
-              <span style={{ color: "var(--text-muted)", fontSize: "11px", fontWeight: "700", textTransform: "uppercase" }}>Total</span>
-              <span>Orders: <strong style={{ color: "var(--primary)" }}>{orders.length}</strong></span>
-              <span>Qty: <strong style={{ color: "#f59e0b" }}>{stats.totalQty}</strong></span>
-              <span>Profit: <strong style={{ color: stats.totalProfit >= 0 ? "var(--success)" : "var(--danger)" }}>₹{stats.totalProfit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-            </>
-          )}
+          <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "500" }}>
+            {hasFilter ? (
+              <span>Active filters applied. Showing matching results.</span>
+            ) : (
+              <span>Showing all transactions. Use filters above to narrow down.</span>
+            )}
+          </div>
+          
+          <div style={{
+            background: "rgba(255, 255, 255, 0.03)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "8px",
+            padding: "6px 14px",
+            fontSize: "13px",
+            color: "var(--text-secondary)",
+            fontWeight: "600",
+            whiteSpace: "nowrap",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+          }}>
+            {hasFilter ? (
+              <>
+                <span style={{ color: "var(--text-muted)", fontSize: "11px", fontWeight: "700", textTransform: "uppercase" }}>Filtered</span>
+                <span>Orders: <strong style={{ color: "var(--primary)" }}>{filteredOrders.length}</strong></span>
+                <span>Qty: <strong style={{ color: "#f59e0b" }}>{filteredStats.totalQty}</strong></span>
+                <span>Profit: <strong style={{ color: filteredStats.totalProfit >= 0 ? "var(--success)" : "var(--danger)" }}>₹{filteredStats.totalProfit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+              </>
+            ) : (
+              <>
+                <span style={{ color: "var(--text-muted)", fontSize: "11px", fontWeight: "700", textTransform: "uppercase" }}>Total</span>
+                <span>Orders: <strong style={{ color: "var(--primary)" }}>{orders.length}</strong></span>
+                <span>Qty: <strong style={{ color: "#f59e0b" }}>{stats.totalQty}</strong></span>
+                <span>Profit: <strong style={{ color: stats.totalProfit >= 0 ? "var(--success)" : "var(--danger)" }}>₹{stats.totalProfit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

@@ -56,6 +56,7 @@ function Ledger() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCourier, setFilterCourier] = useState("");
   const [filterCustomerState, setFilterCustomerState] = useState("");
+  const [filterOrderNo, setFilterOrderNo] = useState("");
 
   // Form states for fast entry
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // Default today
@@ -409,9 +410,14 @@ function Ledger() {
         const stateName = o.customerState || "Gujarat";
         if (stateName !== filterCustomerState) return false;
       }
+      // Order ID filter
+      if (filterOrderNo.trim()) {
+        const orderNoStr = (o.orderNo || "").toLowerCase();
+        if (!orderNoStr.includes(filterOrderNo.trim().toLowerCase())) return false;
+      }
       return true;
     });
-  }, [orders, filterDate, filterStatus, filterProduct, filterCourier, filterCustomerState]);
+  }, [orders, filterDate, filterStatus, filterProduct, filterCourier, filterCustomerState, filterOrderNo]);
 
   // Stats for filtered results
   const filteredStats = useMemo(() => {
@@ -423,13 +429,14 @@ function Ledger() {
     return { totalQty, totalProfit };
   }, [filteredOrders]);
 
-  const hasFilter = filterDate || filterStatus || filterProduct || filterCourier || filterCustomerState;
+  const hasFilter = filterDate || filterStatus || filterProduct || filterCourier || filterCustomerState || filterOrderNo.trim();
   const clearFilters = () => {
     setFilterProduct("");
     setFilterDate("");
     setFilterStatus("");
     setFilterCourier("");
     setFilterCustomerState("");
+    setFilterOrderNo("");
   };
 
   return (
@@ -469,10 +476,22 @@ function Ledger() {
         {/* Filter Inputs Grid */}
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
           gap: "16px",
           alignItems: "flex-end"
         }}>
+          {/* Order No Filter */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Order No. / ID</label>
+            <input
+              type="text"
+              placeholder="Filter by Order ID..."
+              value={filterOrderNo}
+              onChange={(e) => setFilterOrderNo(e.target.value)}
+              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+            />
+          </div>
+
           {/* Product Filter */}
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Product Name</label>

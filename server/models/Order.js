@@ -80,6 +80,11 @@ const orderSchema = new mongoose.Schema(
       default: Date.now,
     },
 
+    statusChangedAt: {
+      type: Date,
+      default: null,
+    },
+
     status: {
       type: String,
       default: "Completed",

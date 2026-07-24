@@ -22,13 +22,25 @@ const FILTER_PRODUCTS = [
   "Shapewear Black and Cream (Pack of 2)"
 ];
 
+const isOrderLocked = (o) => {
+  const status = o.paymentStatus || "Pending";
+  if (status === "RTO Returned" || status === "Cancel") {
+    const lockBaseTime = o.statusChangedAt || o.updatedAt || o.date || o.createdAt;
+    if (lockBaseTime) {
+      const timeDiff = new Date() - new Date(lockBaseTime);
+      return timeDiff > 24 * 60 * 60 * 1000;
+    }
+  }
+  return false;
+};
+
 const calculateOrderProfit = (o) => {
   const paymentStatus = o.paymentStatus || "Pending";
-  if (paymentStatus === "Pending" || paymentStatus === "RTO Returned") {
+  if (paymentStatus === "Pending") {
     return 0;
   }
-  if (paymentStatus === "Cancel") {
-    return -3;
+  if (paymentStatus === "Cancel" || paymentStatus === "RTO Returned") {
+    return -5;
   }
   if (paymentStatus === "Return") {
     return -157;
@@ -921,13 +933,15 @@ function Ledger() {
                         <select 
                           value={o.paymentStatus || "Pending"} 
                           onChange={(e) => handleStatusChange(o._id, e.target.value)}
+                          disabled={isOrderLocked(o)}
                           style={{
                             padding: "6px 12px",
                             borderRadius: "8px",
                             fontSize: "12px",
                             fontWeight: "600",
                             border: "1px solid var(--border-color)",
-                            cursor: "pointer",
+                            cursor: isOrderLocked(o) ? "not-allowed" : "pointer",
+                            opacity: isOrderLocked(o) ? 0.6 : 1,
                             width: "120px",
                             backgroundColor: 
                               o.paymentStatus === "Complete" ? "rgba(16, 185, 129, 0.15)" :
@@ -965,37 +979,41 @@ function Ledger() {
                         <div style={{ display: "flex", justifyContent: "center", gap: "4px", alignItems: "center" }}>
                           <button 
                             type="button"
-                            onClick={() => startEdit(o)}
+                            onClick={() => !isOrderLocked(o) && startEdit(o)}
+                            disabled={isOrderLocked(o)}
                             style={{ 
                               background: "none", 
                               border: "none", 
-                              color: "var(--primary)", 
-                              cursor: "pointer", 
+                              color: isOrderLocked(o) ? "var(--text-muted)" : "var(--primary)", 
+                              cursor: isOrderLocked(o) ? "not-allowed" : "pointer", 
                               fontSize: "15px",
                               padding: "4px 8px",
                               borderRadius: "4px",
-                              transition: "all var(--transition-fast)"
+                              transition: "all var(--transition-fast)",
+                              opacity: isOrderLocked(o) ? 0.5 : 1
                             }}
-                            className="edit-btn-hover"
-                            title="Edit Row"
+                            className={isOrderLocked(o) ? "" : "edit-btn-hover"}
+                            title={isOrderLocked(o) ? "Locked (24h after RTO/Cancel)" : "Edit Row"}
                           >
                             <FaEdit />
                           </button>
                           <button 
                             type="button"
-                            onClick={() => handleDeleteRow(o._id)} 
+                            onClick={() => !isOrderLocked(o) && handleDeleteRow(o._id)} 
+                            disabled={isOrderLocked(o)}
                             style={{ 
                               background: "none", 
                               border: "none", 
-                              color: "rgba(239, 68, 68, 0.7)", 
-                              cursor: "pointer", 
+                              color: isOrderLocked(o) ? "var(--text-muted)" : "rgba(239, 68, 68, 0.7)", 
+                              cursor: isOrderLocked(o) ? "not-allowed" : "pointer", 
                               fontSize: "15px",
                               padding: "4px 8px",
                               borderRadius: "4px",
-                              transition: "all var(--transition-fast)"
+                              transition: "all var(--transition-fast)",
+                              opacity: isOrderLocked(o) ? 0.5 : 1
                             }}
-                            className="delete-btn-hover"
-                            title="Delete Row"
+                            className={isOrderLocked(o) ? "" : "delete-btn-hover"}
+                            title={isOrderLocked(o) ? "Locked (24h after RTO/Cancel)" : "Delete Row"}
                           >
                             <FaTrash />
                           </button>

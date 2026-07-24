@@ -3,11 +3,11 @@ import { FaPlus, FaTrash, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, Fa
 
 const calculateOrderProfit = (o) => {
   const paymentStatus = o.paymentStatus || "Pending";
-  if (paymentStatus === "Pending" || paymentStatus === "RTO Returned") {
+  if (paymentStatus === "Pending") {
     return 0;
   }
-  if (paymentStatus === "Cancel") {
-    return -3;
+  if (paymentStatus === "Cancel" || paymentStatus === "RTO Returned") {
+    return -5;
   }
   if (paymentStatus === "Return") {
     return -157;

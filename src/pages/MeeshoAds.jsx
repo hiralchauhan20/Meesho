@@ -172,6 +172,7 @@ function MeeshoAds() {
 
     let totalThisMonth = 0;
     let loggedDaysThisMonth = new Set();
+    let entriesCountThisMonth = 0;
     let totalLastMonth = 0;
     let totalAllTime = 0;
 
@@ -188,6 +189,7 @@ function MeeshoAds() {
         totalThisMonth += amountVal;
         // Keep track of unique dates logged this month
         loggedDaysThisMonth.add(d.toDateString());
+        entriesCountThisMonth += 1;
       } else if (d.getFullYear() === lastMonthYear && d.getMonth() === lastMonth) {
         totalLastMonth += amountVal;
       }
@@ -205,8 +207,8 @@ function MeeshoAds() {
       monthlyBreakdownMap[monthKey].entries += 1;
     });
 
-    const avgDailyThisMonth = loggedDaysThisMonth.size > 0 
-      ? totalThisMonth / loggedDaysThisMonth.size 
+    const avgDailyThisMonth = entriesCountThisMonth > 0 
+      ? totalThisMonth / entriesCountThisMonth 
       : 0;
 
     // Convert breakdown map to sorted list
@@ -294,7 +296,7 @@ function MeeshoAds() {
             <div className="stat-card-icon"><FaCalculator /></div>
           </div>
           <div className="stat-card-value">₹{stats.avgDailyThisMonth.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</div>
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Spent per active logged day</div>
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Spent per logged day entry</div>
         </div>
 
         <div className="stat-card" style={{ "--card-accent": "var(--warning)" }}>

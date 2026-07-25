@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { FaPlus, FaTrash, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen, FaExclamationTriangle, FaBoxes, FaCheckCircle } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
+import { API_URL } from "../config";
 
 const calculateOrderProfit = (o) => {
   const paymentStatus = o.paymentStatus || "Pending";
@@ -68,19 +69,19 @@ function Reports() {
       const headers = { Authorization: `Bearer ${token}` };
 
       // Fetch expenses
-      const expenseRes = await fetch("/api/expenses", { headers });
+      const expenseRes = await fetch(`${API_URL}/api/expenses`, { headers });
       if (!expenseRes.ok) throw new Error("Failed to fetch expenses");
       const expenseData = await expenseRes.json();
       setExpenses(expenseData);
 
       // Fetch orders (ledger transactions)
-      const ordersRes = await fetch("/api/orders", { headers });
+      const ordersRes = await fetch(`${API_URL}/api/orders`, { headers });
       if (!ordersRes.ok) throw new Error("Failed to fetch ledger transactions");
       const ordersData = await ordersRes.json();
       setOrders(ordersData);
 
       // Fetch stock summary
-      const stockRes = await fetch("/api/investments/stock", { headers });
+      const stockRes = await fetch(`${API_URL}/api/investments/stock`, { headers });
       if (stockRes.ok) {
         const stockData = await stockRes.json();
         setStocks(stockData);
@@ -104,7 +105,7 @@ function Reports() {
         note
       };
 
-      const res = await fetch("/api/expenses/add", {
+      const res = await fetch(`${API_URL}/api/expenses/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -137,7 +138,7 @@ function Reports() {
 
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`/api/expenses/${deleteId}`, {
+      const res = await fetch(`${API_URL}/api/expenses/${deleteId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`

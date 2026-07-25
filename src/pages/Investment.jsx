@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { FaPlus, FaTrash, FaEdit, FaFileExport, FaCalendarAlt, FaSearch, FaTimes, FaBriefcase, FaExclamationTriangle, FaBoxes, FaCheckCircle } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
+import { API_URL } from "../config";
 
 function Investment() {
   const [investments, setInvestments] = useState([]);
@@ -52,7 +53,7 @@ function Investment() {
 
   async function fetchInvestments() {
     try {
-      const res = await fetch("/api/investments", {
+      const res = await fetch(`${API_URL}/api/investments`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
         }
@@ -69,7 +70,7 @@ function Investment() {
 
   async function fetchStockSummary() {
     try {
-      const res = await fetch("/api/investments/stock", {
+      const res = await fetch(`${API_URL}/api/investments/stock`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
         }
@@ -111,7 +112,7 @@ function Investment() {
         status
       };
 
-      const res = await fetch("/api/investments/add", {
+      const res = await fetch(`${API_URL}/api/investments/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -140,7 +141,7 @@ function Investment() {
   // Inline status change handler
   const handleStatusChange = async (id, newStatus) => {
     try {
-      const res = await fetch(`/api/investments/${id}`, {
+      const res = await fetch(`${API_URL}/api/investments/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -169,7 +170,7 @@ function Investment() {
     if (!deleteId) return;
 
     try {
-      const res = await fetch(`/api/investments/${deleteId}`, {
+      const res = await fetch(`${API_URL}/api/investments/${deleteId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -216,7 +217,7 @@ function Investment() {
         status: editStatus
       };
 
-      const res = await fetch(`/api/investments/${editingInvestment._id}`, {
+      const res = await fetch(`${API_URL}/api/investments/${editingInvestment._id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

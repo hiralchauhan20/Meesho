@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice, FaSearch, FaTimes, FaExclamationTriangle, FaCheckCircle, FaBoxes } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
+import { API_URL } from "../config";
 
 
 const INDIA_STATES = [
@@ -147,7 +148,7 @@ function Ledger() {
         date: new Date(editDate).toISOString()
       };
 
-      const res = await fetch(`/api/orders/${editingOrder._id}`, {
+      const res = await fetch(`${API_URL}/api/orders/${editingOrder._id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -193,7 +194,7 @@ function Ledger() {
 
   const fetchStockSummary = async () => {
     try {
-      const res = await fetch("/api/investments/stock", {
+      const res = await fetch(`${API_URL}/api/investments/stock`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
         }
@@ -216,7 +217,7 @@ function Ledger() {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/orders", {
+      const res = await fetch(`${API_URL}/api/orders`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
         }
@@ -281,7 +282,7 @@ function Ledger() {
         deliveryStatus: "Delivered"
       };
 
-      const res = await fetch("/api/orders/add", {
+      const res = await fetch(`${API_URL}/api/orders/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -324,7 +325,7 @@ function Ledger() {
     if (!deleteId) return;
 
     try {
-      const res = await fetch(`/api/orders/${deleteId}`, {
+      const res = await fetch(`${API_URL}/api/orders/${deleteId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
@@ -343,7 +344,7 @@ function Ledger() {
 
   const handleStatusChange = async (id, newStatus) => {
     try {
-      const res = await fetch(`/api/orders/${id}`, {
+      const res = await fetch(`${API_URL}/api/orders/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

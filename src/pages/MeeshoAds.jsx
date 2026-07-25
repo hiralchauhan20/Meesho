@@ -12,6 +12,7 @@ import {
   FaCalculator 
 } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
+import { API_URL } from "../config";
 
 function MeeshoAds() {
   const [ads, setAds] = useState([]);
@@ -56,7 +57,7 @@ function MeeshoAds() {
   const fetchAds = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/expenses", {
+      const res = await fetch(`${API_URL}/api/expenses`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`
         }
@@ -83,7 +84,7 @@ function MeeshoAds() {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/expenses/add", {
+      const res = await fetch(`${API_URL}/api/expenses/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -131,7 +132,7 @@ function MeeshoAds() {
 
     setUpdating(true);
     try {
-      const res = await fetch(`/api/expenses/${editingAd._id}`, {
+      const res = await fetch(`${API_URL}/api/expenses/${editingAd._id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -167,7 +168,7 @@ function MeeshoAds() {
     if (!deleteId) return;
 
     try {
-      const res = await fetch(`/api/expenses/${deleteId}`, {
+      const res = await fetch(`${API_URL}/api/expenses/${deleteId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`

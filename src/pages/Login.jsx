@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FaStore, FaEnvelope, FaLock, FaUserPlus, FaSignInAlt, FaBoxOpen } from "react-icons/fa";
+import { API_URL } from "../config";
 
 // Helper: get saved emails list from localStorage
 const getSavedEmails = () => {
@@ -36,7 +37,7 @@ function Login({ setToken }) {
     setLoading(true);
 
     try {
-      const endpoint = isRegister ? "/api/users/register" : "/api/users/login";
+      const endpoint = isRegister ? `${API_URL}/api/users/register` : `${API_URL}/api/users/login`;
       const payload = isRegister 
         ? { name: shopName.trim(), email: email.trim().toLowerCase(), password }
         : { email: email.trim().toLowerCase(), password };

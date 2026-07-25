@@ -1215,17 +1215,14 @@ function Reports() {
                 </div>
               ) : (
                 expenses.filter(e => e.category !== "Advertising").map((exp) => (
-                  <div key={exp._id} style={{ display: "flex", justify: "space-between", alignItems: "center", padding: "12px", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "6px" }}>
+                  <div key={exp._id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "6px" }}>
                     <div>
                       <div style={{ fontWeight: "600", fontSize: "13px" }}>{exp.title}</div>
                       <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
                         {exp.category} | {new Date(exp.date || exp.createdAt).toLocaleDateString()}
                       </div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ color: "var(--danger)", fontWeight: "600", fontSize: "13px" }}>
-                        -₹{exp.amount.toLocaleString()}
-                      </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                       <button 
                         onClick={() => startEditExpense(exp)}
                         style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "13px", display: "flex", alignItems: "center" }}
@@ -1235,11 +1232,14 @@ function Reports() {
                       </button>
                       <button 
                         onClick={() => handleDeleteExpense(exp._id)}
-                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "14px" }}
+                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center" }}
                         title="Delete"
                       >
                         &times;
                       </button>
+                      <span style={{ color: "var(--danger)", fontWeight: "600", fontSize: "13px", marginLeft: "4px" }}>
+                        -₹{exp.amount.toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 ))

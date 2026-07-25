@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { FaPlus, FaTrash, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen, FaExclamationTriangle, FaBoxes, FaCheckCircle } from "react-icons/fa";
+import { FaPlus, FaTrash, FaEdit, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen, FaExclamationTriangle, FaBoxes, FaCheckCircle } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
 import { API_URL } from "../config";
 
@@ -44,6 +44,14 @@ function Reports() {
   const [category, setCategory] = useState("Packaging");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+
+  // Edit Form States
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState("Packaging");
+  const [editAmount, setEditAmount] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [editDate, setEditDate] = useState("");
 
   // Custom Modal States
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -151,6 +159,51 @@ function Reports() {
       showAlert(err.message, "Error");
     } finally {
       setDeleteId(null);
+    }
+  };
+
+  const startEditExpense = (exp) => {
+    setEditingExpense(exp);
+    setEditTitle(exp.title || "");
+    setEditCategory(exp.category || "Packaging");
+    setEditAmount(exp.amount ? exp.amount.toString() : "");
+    setEditNote(exp.note || "");
+    const formattedDate = new Date(exp.date || exp.createdAt).toISOString().slice(0, 10);
+    setEditDate(formattedDate);
+  };
+
+  const handleEditExpenseSubmit = async (e) => {
+    e.preventDefault();
+    if (!editTitle.trim() || !editAmount || Number(editAmount) <= 0) {
+      showAlert("Please enter a valid title and amount.", "Validation Error");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const payload = {
+        title: editTitle.trim(),
+        category: editCategory,
+        amount: Number(editAmount),
+        date: new Date(editDate).toISOString(),
+        note: editNote.trim()
+      };
+
+      const res = await fetch(`${API_URL}/api/expenses/${editingExpense._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error("Failed to update expense");
+
+      setEditingExpense(null);
+      fetchFinancialData();
+    } catch (err) {
+      showAlert(err.message, "Error");
     }
   };
 
@@ -1174,6 +1227,13 @@ function Reports() {
                         -₹{exp.amount.toLocaleString()}
                       </span>
                       <button 
+                        onClick={() => startEditExpense(exp)}
+                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "13px", display: "flex", alignItems: "center" }}
+                        title="Edit"
+                      >
+                        <FaEdit />
+                      </button>
+                      <button 
                         onClick={() => handleDeleteExpense(exp._id)}
                         style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "14px" }}
                         title="Delete"
@@ -1225,6 +1285,57 @@ function Reports() {
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowAddExpense(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Save Expense</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Expense Modal */}
+      {editingExpense && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3 className="modal-title">Edit Extra Expense</h3>
+              <button className="modal-close" onClick={() => setEditingExpense(null)}>&times;</button>
+            </div>
+            <form onSubmit={handleEditExpenseSubmit}>
+              <div className="form-grid">
+                <div className="form-full">
+                  <label>Expense Title</label>
+                  <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} required placeholder="e.g. Packing Tapes" />
+                </div>
+                <div>
+                  <label>Category</label>
+                  <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}>
+                    <option value="Packaging">Packaging</option>
+                    <option value="Office Rent">Office Rent</option>
+                    <option value="Advertising">Advertising</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Amount (₹)</label>
+                  <input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} required />
+                </div>
+                <div className="form-full">
+                  <label>Date</label>
+                  <input 
+                    type="date" 
+                    value={editDate} 
+                    onChange={(e) => setEditDate(e.target.value)} 
+                    max={new Date().toISOString().slice(0, 10)}
+                    required 
+                  />
+                </div>
+                <div className="form-full">
+                  <label>Notes (Optional)</label>
+                  <textarea value={editNote} onChange={(e) => setEditNote(e.target.value)} rows="3" placeholder="Describe the operational cost..."></textarea>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingExpense(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save Changes</button>
               </div>
             </form>
           </div>

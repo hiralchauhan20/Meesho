@@ -20,7 +20,7 @@ function Investment() {
   const [quantity, setQuantity] = useState("1");
   const [unitType, setUnitType] = useState("Dozen"); // Dozen or Packets
   const [price, setPrice] = useState("");
-  const [status, setStatus] = useState("Complete"); // Default Complete
+  const [status, setStatus] = useState("Pending"); // Default Pending
 
   // Edit Form States
   const [editingInvestment, setEditingInvestment] = useState(null);
@@ -128,7 +128,7 @@ function Investment() {
       setQuantity("1");
       setUnitType("Dozen");
       setPrice("");
-      setStatus("Complete");
+      setStatus("Pending");
 
       // Refresh list
       fetchInvestments();

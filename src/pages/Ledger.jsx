@@ -275,7 +275,7 @@ function Ledger() {
         shippingCost: 0, // Set to 0 since field is removed
         gst: Number(gst),
         courierPartner,
-        paymentStatus: "Complete",
+        paymentStatus: "Pending",
         date: new Date(date).toISOString(),
         customerName: "Meesho Buyer",
         status: "Completed",

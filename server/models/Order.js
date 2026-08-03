@@ -25,7 +25,13 @@ const orderSchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
-      enum: ["Pending", "Complete", "RTO Returned", "Cancel", "Return"],
+      enum: ["Pending", "Complete", "RTO Returned", "Cancel", "Return", "Wrong Return"],
+      default: "Pending",
+    },
+
+    dispatchStatus: {
+      type: String,
+      enum: ["Pending", "Dispatched"],
       default: "Pending",
     },
 
@@ -98,6 +104,17 @@ const orderSchema = new mongoose.Schema(
     trackingId: {
       type: String,
       default: "",
+    },
+
+    claimStatus: {
+      type: String,
+      enum: ["No Claim", "Pending", "Approved", "Rejected"],
+      default: "No Claim",
+    },
+
+    claimAmount: {
+      type: Number,
+      default: 0,
     },
   },
   {

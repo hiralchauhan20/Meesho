@@ -132,6 +132,12 @@ const normalizeKey = (str) => {
   if (cleaned.includes("shapware") || cleaned.includes("shapewear") || cleaned.includes("shape")) {
     return "shapewearblack";
   }
+  if (cleaned.includes("meeshomotikothadi") || (cleaned.includes("meesho") && cleaned.includes("moti") && (cleaned.includes("kothadi") || cleaned.includes("bag")))) {
+    return "meeshomotikothadi";
+  }
+  if (cleaned.includes("meeshonanikothadi") || (cleaned.includes("meesho") && cleaned.includes("nani") && (cleaned.includes("kothadi") || cleaned.includes("bag")))) {
+    return "meeshonanikothadi";
+  }
   if (cleaned.includes("meeshokothadi") || cleaned.includes("meeshobag") || (cleaned.includes("meesho") && cleaned.includes("kothadi"))) {
     return "meeshokothadi";
   }
@@ -167,6 +173,12 @@ const getCanonicalProductName = (name) => {
   }
   if (norm === "shapewearblackandcream") {
     return "Shapewear Black and Cream";
+  }
+  if (norm === "meeshomotikothadi") {
+    return "Meesho Moti Kothadi";
+  }
+  if (norm === "meeshonanikothadi") {
+    return "Meesho Nani Kothadi";
   }
   if (norm === "meeshokothadi") {
     return "Meesho Kothadi";
@@ -258,17 +270,23 @@ export const getStockSummary = async (req, res) => {
       }
 
       // B. Packaging Materials (Kothadi & Thank You Card) Deduction per order:
-      // 1. Always deduct 1 Meesho Kothadi per order
-      const meeshoKey = "meeshokothadi";
-      ensureStockEntry(meeshoKey, "Meesho Kothadi");
-      stockMap[meeshoKey].totalSoldPcs += soldQty;
+      // 1. Meesho Kothadi deduction: Moti (pack >= 6) vs Nani (pack < 6)
+      if (packMultiplier >= 6) {
+        const meeshoMotiKey = "meeshomotikothadi";
+        ensureStockEntry(meeshoMotiKey, "Meesho Moti Kothadi");
+        stockMap[meeshoMotiKey].totalSoldPcs += soldQty;
+      } else {
+        const meeshoNaniKey = "meeshonanikothadi";
+        ensureStockEntry(meeshoNaniKey, "Meesho Nani Kothadi");
+        stockMap[meeshoNaniKey].totalSoldPcs += soldQty;
+      }
 
       // 2. Always deduct 1 Thank You Card per order
       const thankYouKey = "thankyoucard";
       ensureStockEntry(thankYouKey, "Thank You Card");
       stockMap[thankYouKey].totalSoldPcs += soldQty;
 
-      // 3. Transparent Polybag deduction: Nani (<=3 pack) vs Moti (>3 pack)
+      // 3. Transparent Polybag deduction: Nani (pack <= 3) vs Moti (pack > 3)
       if (packMultiplier <= 3) {
         const naniKey = "nanitransparentkothadi";
         ensureStockEntry(naniKey, "Nani Transparent Kothadi");

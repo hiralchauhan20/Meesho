@@ -1,31 +1,45 @@
 import { useState, useEffect, useMemo } from "react";
-import { FaPlus, FaTrash, FaEdit, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen, FaExclamationTriangle, FaBoxes, FaCheckCircle } from "react-icons/fa";
+import { FaPlus, FaTrash, FaEdit, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen, FaExclamationTriangle, FaBoxes, FaCheckCircle, FaTruck, FaTimes } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
 import { API_URL } from "../config";
 
 const calculateOrderProfit = (o) => {
   const paymentStatus = o.paymentStatus || "Pending";
+  const claimAmt = o.claimAmount || 0;
+  
   if (paymentStatus === "Pending") {
     return 0;
   }
   if (paymentStatus === "Cancel" || paymentStatus === "RTO Returned") {
     return -5;
   }
+  
+  if (paymentStatus === "Wrong Return") {
+    if (o.claimStatus === "Approved") {
+      return claimAmt;
+    }
+    return 0;
+  }
+
   if (paymentStatus === "Return") {
+    if (o.claimStatus === "Approved") {
+      return -157 + claimAmt;
+    }
     return -157;
   }
-  const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
+  
   const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
   const gstRate = o.gst || o.productId?.gst || 0;
-  const qtyVal = o.quantity || 1;
   const gstAmount = (sellingVal * gstRate) / 100;
-  return (sellingVal - purchaseVal - gstAmount) * qtyVal;
+  const qtyVal = o.quantity || 1;
+  return (sellingVal - gstAmount) * qtyVal;
 };
 
 function Reports() {
   const [expenses, setExpenses] = useState([]);
   const [orders, setOrders] = useState([]);
   const [stocks, setStocks] = useState([]);
+  const [investments, setInvestments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -34,6 +48,7 @@ function Reports() {
   // Interactive Chart States
   const [activeMetric, setActiveMetric] = useState("income");
   const [hoveredMonthIndex, setHoveredMonthIndex] = useState(null);
+  const [ignoreTrigger, setIgnoreTrigger] = useState(0);
   
   // Trend Cards View Mode States (Day-Wise vs Monthly)
   const [trendViewMode, setTrendViewMode] = useState("daily"); // "daily" or "monthly"
@@ -87,6 +102,12 @@ function Reports() {
       if (!ordersRes.ok) throw new Error("Failed to fetch ledger transactions");
       const ordersData = await ordersRes.json();
       setOrders(ordersData);
+
+      // Fetch investments
+      const investmentRes = await fetch(`${API_URL}/api/investments`, { headers });
+      if (!investmentRes.ok) throw new Error("Failed to fetch investments");
+      const investmentData = await investmentRes.json();
+      setInvestments(investmentData);
 
       // Fetch stock summary
       const stockRes = await fetch(`${API_URL}/api/investments/stock`, { headers });
@@ -227,20 +248,17 @@ function Reports() {
         };
       }
 
-      const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
       const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
       const gstRate = o.gst || o.productId?.gst || 0;
       const qtyVal = o.quantity || 1;
-      const payStatus = o.paymentStatus || "Pending";
-
       const gstAmount = (sellingVal * gstRate) / 100;
       const profit = calculateOrderProfit(o);
+      const payStatus = o.paymentStatus || "Pending";
       
       monthlyData[monthKey].orderProfit += profit;
       
       if (payStatus === "Complete") {
         monthlyData[monthKey].sales += sellingVal * qtyVal;
-        monthlyData[monthKey].purchases += purchaseVal * qtyVal;
         monthlyData[monthKey].gst += gstAmount * qtyVal;
       }
     });
@@ -268,12 +286,31 @@ function Reports() {
       }
     });
 
+    // 3. Process investments (stock purchases)
+    investments.forEach((inv) => {
+      const dateObj = new Date(inv.date || inv.createdAt);
+      const monthKey = dateObj.toLocaleString("en-US", { month: "long", year: "numeric" });
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          sales: 0,
+          purchases: 0,
+          gst: 0,
+          otherExpenses: 0,
+          adsExpenses: 0,
+          orderProfit: 0
+        };
+      }
+
+      monthlyData[monthKey].purchases += inv.price || 0;
+    });
+
     // Convert object to sorted array of months
     return Object.keys(monthlyData)
       .map((month) => {
         const item = monthlyData[month];
         const totalCost = item.purchases + item.gst + item.otherExpenses + item.adsExpenses;
-        const netProfit = item.orderProfit - (item.otherExpenses + item.adsExpenses);
+        const netProfit = item.orderProfit - (item.purchases + item.otherExpenses + item.adsExpenses);
         return {
           month,
           ...item,
@@ -301,6 +338,7 @@ function Reports() {
     let gst = 0;
     let otherExpenses = 0;
     let adsExpenses = 0;
+    let netProfit = 0;
 
     monthlyList.forEach((m) => {
       sales += m.sales;
@@ -308,14 +346,69 @@ function Reports() {
       gst += m.gst;
       otherExpenses += m.otherExpenses;
       adsExpenses += m.adsExpenses || 0;
+      netProfit += m.netProfit;
     });
-
-    const netProfit = sales - (purchases + gst + otherExpenses + adsExpenses);
 
     return { sales, purchases, gst, otherExpenses, adsExpenses, netProfit };
   };
 
   const totals = getCumulativeTotals();
+
+  const claimStats = useMemo(() => {
+    let totalClaims = 0;
+    let pendingClaims = 0;
+    let approvedClaims = 0;
+    let rejectedClaims = 0;
+    let approvedAmount = 0;
+
+    orders.forEach((o) => {
+      if (o.claimStatus && o.claimStatus !== "No Claim") {
+        totalClaims++;
+        if (o.claimStatus === "Pending") {
+          pendingClaims++;
+        } else if (o.claimStatus === "Approved") {
+          approvedClaims++;
+          approvedAmount += o.claimAmount || 0;
+        } else if (o.claimStatus === "Rejected") {
+          rejectedClaims++;
+        }
+      }
+    });
+
+    return { totalClaims, pendingClaims, approvedClaims, rejectedClaims, approvedAmount };
+  }, [orders]);
+
+  const activeAlerts = useMemo(() => {
+    let ignoredMap = {};
+    try {
+      ignoredMap = JSON.parse(localStorage.getItem("ignoredLowStock") || "{}");
+    } catch (e) {
+      ignoredMap = {};
+    }
+
+    return stocks.filter(s => {
+      if (s.status !== "OUT_OF_STOCK" && s.status !== "LOW_STOCK") return false;
+      const ignored = ignoredMap[s.productName];
+      if (ignored) {
+        if (s.remainingPcs === ignored.remainingPcs && s.totalSoldPcs === ignored.totalSoldPcs) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [stocks, ignoreTrigger]);
+
+  const handleIgnoreProduct = (productName, remainingPcs, totalSoldPcs) => {
+    let ignoredMap = {};
+    try {
+      ignoredMap = JSON.parse(localStorage.getItem("ignoredLowStock") || "{}");
+    } catch (e) {
+      ignoredMap = {};
+    }
+    ignoredMap[productName] = { remainingPcs, totalSoldPcs };
+    localStorage.setItem("ignoredLowStock", JSON.stringify(ignoredMap));
+    setIgnoreTrigger(prev => prev + 1);
+  };
 
   // ── Yearly chart data ──────────────────────────────────────────
   const getAvailableYears = () => {
@@ -338,13 +431,13 @@ function Reports() {
       profit: 0,
       orders: 0,
       income: 0,
-      returns: 0
+      customerReturns: 0,
+      rtoReturns: 0
     }));
 
     orders.forEach((o) => {
       const d = new Date(o.date || o.createdAt);
       if (d.getFullYear() === selectedYear) {
-        const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
         const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
         const qtyVal = o.quantity || 1;
         const payStatus = o.paymentStatus || "Pending";
@@ -360,9 +453,11 @@ function Reports() {
           data[d.getMonth()].income += sellingVal * qtyVal;
         }
 
-        // Returns count
-        if (payStatus === "Return" || payStatus === "RTO Returned") {
-          data[d.getMonth()].returns += 1;
+        // Returns count split
+        if (payStatus === "Return" || payStatus === "Wrong Return") {
+          data[d.getMonth()].customerReturns += 1;
+        } else if (payStatus === "RTO Returned") {
+          data[d.getMonth()].rtoReturns += 1;
         }
       }
     });
@@ -374,6 +469,13 @@ function Reports() {
       }
     });
 
+    investments.forEach((inv) => {
+      const d = new Date(inv.date || inv.createdAt);
+      if (d.getFullYear() === selectedYear) {
+        data[d.getMonth()].profit -= inv.price || 0;
+      }
+    });
+
     return data;
   };
 
@@ -381,7 +483,8 @@ function Reports() {
   const yearTotal = chartData.reduce((s, d) => s + d.profit, 0);
   const yearOrders = chartData.reduce((s, d) => s + d.orders, 0);
   const yearIncome = chartData.reduce((s, d) => s + d.income, 0);
-  const yearReturns = chartData.reduce((s, d) => s + d.returns, 0);
+  const yearCustomerReturns = chartData.reduce((s, d) => s + d.customerReturns, 0);
+  const yearRtoReturns = chartData.reduce((s, d) => s + d.rtoReturns, 0);
 
   // Day-wise chart data calculation
   const getDailyChartData = () => {
@@ -392,7 +495,8 @@ function Reports() {
       profit: 0,
       orders: 0,
       income: 0,
-      returns: 0
+      customerReturns: 0,
+      rtoReturns: 0
     }));
 
     orders.forEach((o) => {
@@ -400,7 +504,6 @@ function Reports() {
       if (d.getFullYear() === selectedYear && d.getMonth() === trendMonth) {
         const dayIdx = d.getDate() - 1;
         if (dayIdx >= 0 && dayIdx < daysInMonth) {
-          const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
           const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
           const qtyVal = o.quantity || 1;
           const payStatus = o.paymentStatus || "Pending";
@@ -412,8 +515,10 @@ function Reports() {
             data[dayIdx].income += sellingVal * qtyVal;
           }
 
-          if (payStatus === "Return" || payStatus === "RTO Returned") {
-            data[dayIdx].returns += 1;
+          if (payStatus === "Return" || payStatus === "Wrong Return") {
+            data[dayIdx].customerReturns += 1;
+          } else if (payStatus === "RTO Returned") {
+            data[dayIdx].rtoReturns += 1;
           }
         }
       }
@@ -429,6 +534,16 @@ function Reports() {
       }
     });
 
+    investments.forEach((inv) => {
+      const d = new Date(inv.date || inv.createdAt);
+      if (d.getFullYear() === selectedYear && d.getMonth() === trendMonth) {
+        const dayIdx = d.getDate() - 1;
+        if (dayIdx >= 0 && dayIdx < daysInMonth) {
+          data[dayIdx].profit -= Number(inv.price) || 0;
+        }
+      }
+    });
+
     return data;
   };
 
@@ -436,7 +551,8 @@ function Reports() {
   const dailyTotalProfit = dailyData.reduce((s, d) => s + d.profit, 0);
   const dailyTotalOrders = dailyData.reduce((s, d) => s + d.orders, 0);
   const dailyTotalIncome = dailyData.reduce((s, d) => s + d.income, 0);
-  const dailyTotalReturns = dailyData.reduce((s, d) => s + d.returns, 0);
+  const dailyTotalCustomerReturns = dailyData.reduce((s, d) => s + d.customerReturns, 0);
+  const dailyTotalRtoReturns = dailyData.reduce((s, d) => s + d.rtoReturns, 0);
 
   const availableYears = getAvailableYears();
 
@@ -463,11 +579,18 @@ function Reports() {
       bgGrad: "url(#ordersGrad)",
       prefix: "",
     },
-    returns: {
-      label: "Returns & RTO",
+    customerReturns: {
+      label: "Customer Returns",
       color: "#f59e0b", // Orange/Yellow
       glow: "rgba(245, 158, 11, 0.4)",
       bgGrad: "url(#returnsGrad)",
+      prefix: "",
+    },
+    rtoReturns: {
+      label: "RTO Returns",
+      color: "#ec4899", // Pink
+      glow: "rgba(236, 72, 153, 0.4)",
+      bgGrad: "url(#rtoGrad)",
       prefix: "",
     }
   };
@@ -561,7 +684,7 @@ function Reports() {
   const exportCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
     csvContent += "Monthly Profit and Loss Statement - Meesho Manager\n\n";
-    csvContent += "Month,Total Sales (Revenue),Purchase Cost (COGS),GST Cost,Ads Cost,Other Expenses,Net Profit/Loss\n";
+    csvContent += "Month,Total Sales (Revenue),Total Investments,GST Cost,Ads Cost,Other Expenses,Net Profit/Loss\n";
 
     monthlyList.forEach((m) => {
       csvContent += `"${m.month}",${m.sales.toFixed(2)},${m.purchases.toFixed(2)},${m.gst.toFixed(2)},${(m.adsExpenses || 0).toFixed(2)},${m.otherExpenses.toFixed(2)},${m.netProfit.toFixed(2)}\n`;
@@ -600,7 +723,7 @@ function Reports() {
       )}
 
       {/* Inventory Stock Warning Widget */}
-      {stocks.some(s => s.status === "OUT_OF_STOCK" || s.status === "LOW_STOCK") && (
+      {activeAlerts.length > 0 && (
         <div style={{
           background: "var(--glass-bg)",
           backdropFilter: "blur(12px)",
@@ -615,32 +738,45 @@ function Reports() {
           flexWrap: "wrap",
           gap: "12px"
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: "280px" }}>
             <div style={{
-              background: stocks.some(s => s.status === "OUT_OF_STOCK") ? "rgba(239, 68, 68, 0.15)" : "rgba(245, 158, 11, 0.15)",
-              color: stocks.some(s => s.status === "OUT_OF_STOCK") ? "var(--danger)" : "#d97706",
+              background: activeAlerts.some(s => s.status === "OUT_OF_STOCK") ? "rgba(239, 68, 68, 0.15)" : "rgba(245, 158, 11, 0.15)",
+              color: activeAlerts.some(s => s.status === "OUT_OF_STOCK") ? "var(--danger)" : "#d97706",
               padding: "10px",
               borderRadius: "10px",
               display: "flex"
             }}>
               <FaExclamationTriangle style={{ fontSize: "20px" }} />
             </div>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)" }}>
                 Inventory Re-Stock Alert
               </div>
-              <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                {stocks.filter(s => s.status === "OUT_OF_STOCK").length > 0 && (
-                  <span style={{ color: "var(--danger)", fontWeight: "600" }}>
-                    {stocks.filter(s => s.status === "OUT_OF_STOCK").length} product(s) Out of Stock ({stocks.filter(s => s.status === "OUT_OF_STOCK").map(s => s.productName).join(", ")})
-                  </span>
-                )}
-                {stocks.filter(s => s.status === "OUT_OF_STOCK").length > 0 && stocks.filter(s => s.status === "LOW_STOCK").length > 0 && " • "}
-                {stocks.filter(s => s.status === "LOW_STOCK").length > 0 && (
-                  <span style={{ color: "#d97706", fontWeight: "600" }}>
-                    {stocks.filter(s => s.status === "LOW_STOCK").length} product(s) Low Stock
-                  </span>
-                )}
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "6px" }}>
+                {activeAlerts.map(s => (
+                  <div key={s.productName} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.02)", padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
+                    <span style={{ fontSize: "12px", color: "var(--text-primary)" }}>
+                      <strong>{s.productName}</strong>: <span style={{ color: s.status === "OUT_OF_STOCK" ? "var(--danger)" : "#f59e0b", fontWeight: "600" }}>{s.status === "OUT_OF_STOCK" ? "Out of Stock" : `Low Stock (${s.remainingPcs} pcs left)`}</span>
+                    </span>
+                    <button 
+                      onClick={() => handleIgnoreProduct(s.productName, s.remainingPcs, s.totalSoldPcs)}
+                      style={{
+                        background: "rgba(255, 255, 255, 0.05)",
+                        border: "1px solid var(--border-color)",
+                        color: "var(--text-secondary)",
+                        padding: "3px 8px",
+                        borderRadius: "4px",
+                        fontSize: "11px",
+                        cursor: "pointer",
+                        fontWeight: "600"
+                      }}
+                      onMouseEnter={(e) => e.target.style.background = "rgba(255,255,255,0.1)"}
+                      onMouseLeave={(e) => e.target.style.background = "rgba(255,255,255,0.05)"}
+                    >
+                      Ignore Alert
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -664,11 +800,11 @@ function Reports() {
 
         <div className="stat-card" style={{ "--card-accent": "var(--warning)" }}>
           <div className="stat-card-header">
-            <span className="stat-card-title">Purchase Cost (COGS)</span>
+            <span className="stat-card-title">Total Investments</span>
             <div className="stat-card-icon"><FaWallet /></div>
           </div>
           <div className="stat-card-value">₹{totals.purchases.toLocaleString()}</div>
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total inventory buying cost</div>
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total stock/inventory investment cost</div>
         </div>
 
         <div className="stat-card" style={{ "--card-accent": "var(--danger)" }}>
@@ -687,6 +823,50 @@ function Reports() {
           </div>
           <div className="stat-card-value">₹{totals.netProfit.toLocaleString()}</div>
           <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Revenue minus all expenses</div>
+        </div>
+      </div>
+
+      {/* Meesho Claims Overview Cards */}
+      <div style={{ marginTop: "24px" }}>
+        <h3 style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
+          📊 Meesho Claims Summary
+        </h3>
+        <div className="cards" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px" }}>
+          <div className="stat-card" style={{ "--card-accent": "var(--primary)" }}>
+            <div className="stat-card-header">
+              <span className="stat-card-title">Claims Filed</span>
+              <div className="stat-card-icon"><FaFileInvoiceDollar /></div>
+            </div>
+            <div className="stat-card-value">{claimStats.totalClaims}</div>
+            <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total wrong/returns claimed</div>
+          </div>
+
+          <div className="stat-card" style={{ "--card-accent": "var(--warning)" }}>
+            <div className="stat-card-header">
+              <span className="stat-card-title">Claims Pending</span>
+              <div className="stat-card-icon"><FaExclamationTriangle /></div>
+            </div>
+            <div className="stat-card-value">{claimStats.pendingClaims}</div>
+            <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Awaiting response from Meesho</div>
+          </div>
+
+          <div className="stat-card" style={{ "--card-accent": "var(--success)" }}>
+            <div className="stat-card-header">
+              <span className="stat-card-title">Claims Approved</span>
+              <div className="stat-card-icon"><FaCheckCircle /></div>
+            </div>
+            <div className="stat-card-value">{claimStats.approvedClaims}</div>
+            <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Recovered: ₹{claimStats.approvedAmount.toLocaleString("en-IN")}</div>
+          </div>
+
+          <div className="stat-card" style={{ "--card-accent": "var(--danger)" }}>
+            <div className="stat-card-header">
+              <span className="stat-card-title">Claims Rejected</span>
+              <div className="stat-card-icon"><FaTimes /></div>
+            </div>
+            <div className="stat-card-value">{claimStats.rejectedClaims}</div>
+            <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Rejected / Cancelled claims</div>
+          </div>
         </div>
       </div>
 
@@ -745,7 +925,8 @@ function Reports() {
             { id: "income", label: "Income", val: yearIncome, prefix: "₹", color: "#10b981" },
             { id: "profit", label: "Net Profit", val: yearTotal, prefix: "₹", color: "#6366f1" },
             { id: "orders", label: "Total Orders", val: yearOrders, prefix: "", color: "#0ea5e9" },
-            { id: "returns", label: "Returns & RTO", val: yearReturns, prefix: "", color: "#f59e0b" }
+            { id: "customerReturns", label: "Customer Returns", val: yearCustomerReturns, prefix: "", color: "#f59e0b" },
+            { id: "rtoReturns", label: "RTO Returns", val: yearRtoReturns, prefix: "", color: "#ec4899" }
           ].map((tab) => {
             const isActive = activeMetric === tab.id;
             return (
@@ -754,7 +935,7 @@ function Reports() {
                 onClick={() => setActiveMetric(tab.id)}
                 type="button"
                 style={{
-                  background: isActive ? `rgba(${tab.id === 'income' ? '16,185,129' : tab.id === 'profit' ? '99,102,241' : tab.id === 'orders' ? '14,165,233' : '245,158,11'}, 0.15)` : "rgba(255,255,255,0.02)",
+                  background: isActive ? `rgba(${tab.id === 'income' ? '16,185,129' : tab.id === 'profit' ? '99,102,241' : tab.id === 'orders' ? '14,165,233' : tab.id === 'customerReturns' ? '245,158,11' : '236,72,153'}, 0.15)` : "rgba(255,255,255,0.02)",
                   border: isActive ? `1px solid ${tab.color}` : "1px solid var(--border-color)",
                   borderRadius: "8px",
                   padding: "10px 16px",
@@ -801,6 +982,10 @@ function Reports() {
               <linearGradient id="returnsGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.3" />
                 <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
+              </linearGradient>
+              <linearGradient id="rtoGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#ec4899" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#ec4899" stopOpacity="0.0" />
               </linearGradient>
             </defs>
 
@@ -965,8 +1150,12 @@ function Reports() {
                   <span style={{ fontWeight: "600", color: "#0ea5e9" }}>{chartData[hoveredMonthIndex].orders}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
-                  <span style={{ color: "var(--text-secondary)" }}>Returns & RTO:</span>
-                  <span style={{ fontWeight: "600", color: "#f59e0b" }}>{chartData[hoveredMonthIndex].returns}</span>
+                  <span style={{ color: "var(--text-secondary)" }}>Customer Returns:</span>
+                  <span style={{ fontWeight: "600", color: "#f59e0b" }}>{chartData[hoveredMonthIndex].customerReturns}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                  <span style={{ color: "var(--text-secondary)" }}>RTO Returns:</span>
+                  <span style={{ fontWeight: "600", color: "#ec4899" }}>{chartData[hoveredMonthIndex].rtoReturns}</span>
                 </div>
               </div>
             </div>
@@ -1128,21 +1317,38 @@ function Reports() {
           {renderSparkline("orders", "#0ea5e9", false)}
         </div>
 
-        {/* Returns & RTO Line Graph Card */}
+        {/* Customer Returns Line Graph Card */}
         <div style={{ background: "var(--glass-bg)", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "20px", boxShadow: "var(--glass-shadow)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <div>
-              <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>🔄 Returns & RTO Trend</h4>
+              <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>🔄 Customer Returns Trend</h4>
               <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>
-                {trendViewMode === "daily" ? `Daily returns (${MONTHS[trendMonth]})` : "RTO and customer return count"}
+                {trendViewMode === "daily" ? `Daily customer returns (${MONTHS[trendMonth]})` : "Volume of customer returns"}
               </p>
             </div>
             <div style={{ fontSize: "16px", color: "#f59e0b" }}><FaFileInvoiceDollar /></div>
           </div>
           <div style={{ fontSize: "20px", fontWeight: "800", color: "#f59e0b", marginBottom: "10px" }}>
-            {(trendViewMode === "daily" ? dailyTotalReturns : yearReturns).toLocaleString()} returns
+            {(trendViewMode === "daily" ? dailyTotalCustomerReturns : yearCustomerReturns).toLocaleString()} returns
           </div>
-          {renderSparkline("returns", "#f59e0b", false)}
+          {renderSparkline("customerReturns", "#f59e0b", false)}
+        </div>
+
+        {/* RTO Returns Line Graph Card */}
+        <div style={{ background: "var(--glass-bg)", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "20px", boxShadow: "var(--glass-shadow)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <div>
+              <h4 style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>🔄 RTO Returns Trend</h4>
+              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "3px 0 0" }}>
+                {trendViewMode === "daily" ? `Daily RTO returns (${MONTHS[trendMonth]})` : "Volume of RTO returns"}
+              </p>
+            </div>
+            <div style={{ fontSize: "16px", color: "#ec4899" }}><FaTruck /></div>
+          </div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: "#ec4899", marginBottom: "10px" }}>
+            {(trendViewMode === "daily" ? dailyTotalRtoReturns : yearRtoReturns).toLocaleString()} RTOs
+          </div>
+          {renderSparkline("rtoReturns", "#ec4899", false)}
         </div>
 
       </div>
@@ -1164,7 +1370,7 @@ function Reports() {
                   <tr>
                     <th>Month</th>
                     <th>Sales (₹)</th>
-                    <th>Purchases (₹)</th>
+                    <th>Investment (₹)</th>
                     <th>GST Cost (₹)</th>
                     <th>Ads Cost (₹)</th>
                     <th>Other Exp (₹)</th>

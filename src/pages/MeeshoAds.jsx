@@ -16,6 +16,7 @@ import { API_URL } from "../config";
 
 function MeeshoAds() {
   const [ads, setAds] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -57,16 +58,28 @@ function MeeshoAds() {
   const fetchAds = async () => {
     setLoading(true);
     try {
+      const token = localStorage.getItem("token");
+
+      // 1. Fetch ads expenses
       const res = await fetch(`${API_URL}/api/expenses`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
+          Authorization: `Bearer ${token}`
         }
       });
       if (!res.ok) throw new Error("Failed to fetch ads logs");
       const data = await res.json();
-      // Filter for Advertising category
       const advertisingExpenses = data.filter(exp => exp.category === "Advertising");
       setAds(advertisingExpenses);
+
+      // 2. Fetch orders
+      const resOrders = await fetch(`${API_URL}/api/orders`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (!resOrders.ok) throw new Error("Failed to fetch orders data");
+      const dataOrders = await resOrders.json();
+      setOrders(dataOrders);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -237,6 +250,20 @@ function MeeshoAds() {
     // Convert breakdown map to sorted list
     const monthlyList = Object.values(monthlyBreakdownMap).sort((a, b) => {
       return new Date(b.monthStr) - new Date(a.monthStr);
+    }).map(m => {
+      // Find orders count for this month
+      const totalMonthOrders = orders.filter(o => {
+        if (o.paymentStatus === "Cancel") return false;
+        const d = new Date(o.date || o.createdAt);
+        const monthKey = d.toLocaleString("en-US", { month: "long", year: "numeric" });
+        return monthKey === m.monthStr;
+      }).length;
+
+      return {
+        ...m,
+        ordersCount: totalMonthOrders,
+        avg: totalMonthOrders > 0 ? m.total / totalMonthOrders : 0
+      };
     });
 
     return {
@@ -244,9 +271,22 @@ function MeeshoAds() {
       avgDailyThisMonth,
       totalLastMonth,
       totalAllTime,
-      monthlyList
+      monthlyList,
+      monthlyBreakdownMap
     };
-  }, [ads]);
+  }, [ads, orders]);
+
+  const handleMonthClick = (monthStr) => {
+    const d = new Date(monthStr);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const formatted = `${y}-${m}`;
+    if (filterMonthYear === formatted) {
+      setFilterMonthYear("");
+    } else {
+      setFilterMonthYear(formatted);
+    }
+  };
 
   // ── Filters & Search ────────────────────────────────────────────────
   const filteredAds = useMemo(() => {
@@ -433,32 +473,48 @@ function MeeshoAds() {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {stats.monthlyList.map((m, index) => (
-                  <div 
-                    key={index}
-                    style={{ 
-                      display: "flex", 
-                      justifyContent: "space-between", 
-                      alignItems: "center", 
-                      padding: "12px 16px", 
-                      background: "var(--bg-primary)", 
-                      border: "1px solid var(--border-color)", 
-                      borderRadius: "8px" 
-                    }}
-                  >
-                    <span style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)" }}>
-                      {m.monthStr}
-                    </span>
-                    <div style={{ textAlign: "right" }}>
-                      <span style={{ fontWeight: "700", fontSize: "14px", color: "var(--primary)" }}>
-                        ₹{m.total.toLocaleString("en-IN")}
+                {stats.monthlyList.map((m, index) => {
+                  const d = new Date(m.monthStr);
+                  const y = d.getFullYear();
+                  const mNum = String(d.getMonth() + 1).padStart(2, '0');
+                  const isCurrentFilter = filterMonthYear === `${y}-${mNum}`;
+                  
+                  return (
+                    <div 
+                      key={index}
+                      onClick={() => handleMonthClick(m.monthStr)}
+                      style={{ 
+                        display: "flex", 
+                        justifyContent: "space-between", 
+                        alignItems: "center", 
+                        padding: "12px 16px", 
+                        background: isCurrentFilter ? "rgba(99, 102, 241, 0.15)" : "var(--bg-primary)", 
+                        border: isCurrentFilter ? "1px solid var(--primary)" : "1px solid var(--border-color)", 
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        transition: "all var(--transition-fast)"
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isCurrentFilter) e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isCurrentFilter) e.currentTarget.style.background = "var(--bg-primary)";
+                      }}
+                    >
+                      <span style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)" }}>
+                        {m.monthStr}
                       </span>
-                      <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "2px" }}>
-                        {m.entries} daily entries
+                      <div style={{ textAlign: "right" }}>
+                        <span style={{ fontWeight: "700", fontSize: "14px", color: "var(--primary)" }}>
+                          ₹{m.total.toLocaleString("en-IN")}
+                        </span>
+                        <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "2px" }}>
+                          {m.entries} entries • Orders: {m.ordersCount} • Avg: ₹{m.avg.toLocaleString("en-IN", { maximumFractionDigits: 2 })}/order
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -547,7 +603,9 @@ function MeeshoAds() {
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border-color)", textAlign: "left" }}>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Date</th>
-                      <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Amount (₹)</th>
+                      <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Spend (₹)</th>
+                      <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Orders</th>
+                      <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Spend / Order (₹)</th>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Note</th>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textAlign: "right" }}>Actions</th>
                     </tr>
@@ -555,6 +613,17 @@ function MeeshoAds() {
                   <tbody>
                     {filteredAds.map((ad) => {
                       const adDate = new Date(ad.date || ad.createdAt);
+                      const dateStr = adDate.toISOString().slice(0, 10);
+                      
+                      // Count orders on this exact day
+                      const ordersCount = orders.filter(o => {
+                        if (o.paymentStatus === "Cancel") return false;
+                        const oDate = new Date(o.date || o.createdAt).toISOString().slice(0, 10);
+                        return oDate === dateStr;
+                      }).length;
+                      
+                      const avgPerOrder = ordersCount > 0 ? ad.amount / ordersCount : 0;
+
                       return (
                         <tr key={ad._id} style={{ borderBottom: "1px solid var(--border-color)" }}>
                           <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--text-primary)", fontWeight: "500" }}>
@@ -562,6 +631,12 @@ function MeeshoAds() {
                           </td>
                           <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--danger)", fontWeight: "600" }}>
                             ₹{ad.amount.toLocaleString("en-IN")}
+                          </td>
+                          <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--text-primary)", fontWeight: "600" }}>
+                            {ordersCount} {ordersCount === 1 ? "order" : "orders"}
+                          </td>
+                          <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--primary)", fontWeight: "600" }}>
+                            {ordersCount > 0 ? `₹${avgPerOrder.toFixed(2)}` : "-"}
                           </td>
                           <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--text-secondary)", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ad.note}>
                             {ad.note || <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>No details</span>}

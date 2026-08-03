@@ -27,8 +27,9 @@ export const addOrder = async (req, res) => {
     }
 
     const orderData = { ...req.body, userId };
-    if (orderData.paymentStatus === "RTO Returned" || orderData.paymentStatus === "Cancel") {
+    if (orderData.paymentStatus && orderData.paymentStatus !== "Pending") {
       orderData.statusChangedAt = new Date();
+      orderData.dispatchStatus = "Dispatched";
     }
     const order = await Order.create(orderData);
 
@@ -68,13 +69,13 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // Check if the order is locked (RTO / Cancelled more than 24 hours ago)
-    const isCurrentlyRtoOrCancel = existingOrder.paymentStatus === "RTO Returned" || existingOrder.paymentStatus === "Cancel";
-    if (isCurrentlyRtoOrCancel) {
+    // Check if the order is locked (non-Pending status set more than 24 hours ago)
+    const isCurrentlyLockedStatus = existingOrder.paymentStatus && existingOrder.paymentStatus !== "Pending";
+    if (isCurrentlyLockedStatus) {
       const lockBaseTime = existingOrder.statusChangedAt || existingOrder.updatedAt || existingOrder.createdAt;
       if (lockBaseTime && (new Date() - new Date(lockBaseTime)) > 24 * 60 * 60 * 1000) {
         return res.status(400).json({
-          message: "This order is locked and cannot be modified after 24 hours of setting RTO Returned or Cancel status."
+          message: "This order is locked and cannot be modified after 24 hours of setting its status."
         });
       }
     }
@@ -82,10 +83,14 @@ export const updateOrderStatus = async (req, res) => {
     // Prepare update data
     const updateData = { ...req.body };
 
-    // If changing status to RTO Returned or Cancel, set statusChangedAt
-    const willBeRtoOrCancel = updateData.paymentStatus === "RTO Returned" || updateData.paymentStatus === "Cancel";
-    if (willBeRtoOrCancel && existingOrder.paymentStatus !== updateData.paymentStatus) {
-      updateData.statusChangedAt = new Date();
+    // If changing status, update statusChangedAt accordingly
+    if (updateData.paymentStatus && existingOrder.paymentStatus !== updateData.paymentStatus) {
+      if (updateData.paymentStatus === "Pending") {
+        updateData.statusChangedAt = null;
+      } else {
+        updateData.statusChangedAt = new Date();
+        updateData.dispatchStatus = "Dispatched";
+      }
     }
 
     const order = await Order.findOneAndUpdate(
@@ -116,13 +121,13 @@ export const deleteOrder = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // Check if the order is locked (RTO / Cancelled more than 24 hours ago)
-    const isCurrentlyRtoOrCancel = existingOrder.paymentStatus === "RTO Returned" || existingOrder.paymentStatus === "Cancel";
-    if (isCurrentlyRtoOrCancel) {
+    // Check if the order is locked (non-Pending status set more than 24 hours ago)
+    const isCurrentlyLockedStatus = existingOrder.paymentStatus && existingOrder.paymentStatus !== "Pending";
+    if (isCurrentlyLockedStatus) {
       const lockBaseTime = existingOrder.statusChangedAt || existingOrder.updatedAt || existingOrder.createdAt;
       if (lockBaseTime && (new Date() - new Date(lockBaseTime)) > 24 * 60 * 60 * 1000) {
         return res.status(400).json({
-          message: "This order is locked and cannot be deleted after 24 hours of setting RTO Returned or Cancel status."
+          message: "This order is locked and cannot be deleted after 24 hours of setting its status."
         });
       }
     }

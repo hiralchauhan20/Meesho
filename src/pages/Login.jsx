@@ -25,6 +25,7 @@ const saveEmailToList = (emailVal) => {
 function Login({ setToken }) {
   const [isRegister, setIsRegister] = useState(false);
   const [shopName, setShopName] = useState("");
+  const [platform, setPlatform] = useState("Meesho");
   const [email, setEmail] = useState(() => localStorage.getItem("rememberedEmail") || "");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,7 +40,7 @@ function Login({ setToken }) {
     try {
       const endpoint = isRegister ? `${API_URL}/api/users/register` : `${API_URL}/api/users/login`;
       const payload = isRegister 
-        ? { name: shopName.trim(), email: email.trim().toLowerCase(), password }
+        ? { name: shopName.trim(), email: email.trim().toLowerCase(), password, platform }
         : { email: email.trim().toLowerCase(), password };
 
       const res = await fetch(endpoint, {
@@ -114,10 +115,10 @@ function Login({ setToken }) {
             <FaBoxOpen style={{ fontSize: "24px" }} />
           </div>
           <h2 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)" }}>
-            Meesho<span style={{ color: "var(--primary)" }}>Manager</span>
+            Seller<span style={{ color: "var(--primary)" }}>Manager</span>
           </h2>
           <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "6px" }}>
-            {isRegister ? "Register your new Meesho shop" : "Log in to manage your shop accounts"}
+            {isRegister ? "Register your new seller account" : "Log in to manage your store accounts"}
           </p>
         </div>
 
@@ -138,22 +139,55 @@ function Login({ setToken }) {
 
         <form onSubmit={handleSubmit}>
           {isRegister && (
-            <div style={{ marginBottom: "20px" }}>
-              <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "8px" }}>
-                Shop Name / Account Name
-              </label>
-              <div style={{ position: "relative" }}>
-                <FaStore style={{ position: "absolute", left: "14px", top: "15px", color: "var(--text-muted)", fontSize: "14px" }} />
-                <input 
-                  type="text" 
-                  placeholder="e.g. HKC Collection" 
-                  value={shopName} 
-                  onChange={(e) => setShopName(e.target.value)} 
-                  required 
-                  style={{ width: "100%", paddingLeft: "42px", height: "46px" }}
-                />
+            <>
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "8px" }}>
+                  Shop Name / Account Name
+                </label>
+                <div style={{ position: "relative" }}>
+                  <FaStore style={{ position: "absolute", left: "14px", top: "15px", color: "var(--text-muted)", fontSize: "14px" }} />
+                  <input 
+                    type="text" 
+                    placeholder="e.g. HKC Collection" 
+                    value={shopName} 
+                    onChange={(e) => setShopName(e.target.value)} 
+                    required 
+                    style={{ width: "100%", paddingLeft: "42px", height: "46px" }}
+                  />
+                </div>
               </div>
-            </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "8px" }}>
+                  Selling Platform
+                </label>
+                <div style={{ position: "relative" }}>
+                  <select 
+                    value={platform} 
+                    onChange={(e) => setPlatform(e.target.value)} 
+                    required 
+                    style={{ 
+                      width: "100%", 
+                      height: "46px", 
+                      padding: "0 14px", 
+                      paddingLeft: "14px",
+                      borderRadius: "8px", 
+                      border: "1px solid var(--border-color)",
+                      background: "var(--bg-secondary)",
+                      color: "var(--text-primary)",
+                      fontSize: "13px",
+                      fontWeight: "600",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <option value="Meesho" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Meesho</option>
+                    <option value="Flipkart" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Flipkart</option>
+                    <option value="Amazon" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Amazon</option>
+                    <option value="Other" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Other</option>
+                  </select>
+                </div>
+              </div>
+            </>
           )}
 
           <div style={{ marginBottom: "20px" }}>
@@ -164,7 +198,7 @@ function Login({ setToken }) {
               <FaEnvelope style={{ position: "absolute", left: "14px", top: "15px", color: "var(--text-muted)", fontSize: "14px" }} />
               <input 
                 type="email" 
-                placeholder="seller@meesho.com" 
+                placeholder="seller@store.com" 
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 required 
@@ -216,7 +250,7 @@ function Login({ setToken }) {
           >
             {loading ? "Please wait..." : isRegister ? (
               <>
-                <FaUserPlus /> Register Shop
+                <FaUserPlus /> Register Account
               </>
             ) : (
               <>
@@ -227,7 +261,7 @@ function Login({ setToken }) {
         </form>
 
         <div style={{ textAlign: "center", marginTop: "24px", fontSize: "13px", color: "var(--text-secondary)" }}>
-          {isRegister ? "Already registered?" : "New Meesho shop account?"}{" "}
+          {isRegister ? "Already registered?" : "New seller account?"}{" "}
           <button 
             onClick={() => {
               setIsRegister(!isRegister);
@@ -242,7 +276,7 @@ function Login({ setToken }) {
               padding: "0"
             }}
           >
-            {isRegister ? "Log In Here" : "Register Shop Here"}
+            {isRegister ? "Log In Here" : "Register Account Here"}
           </button>
         </div>
       </div>

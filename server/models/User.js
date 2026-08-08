@@ -22,6 +22,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "seller",
     },
+
+    platform: {
+      type: String,
+      default: "Meesho",
+    },
   },
   {
     timestamps: true,

@@ -97,7 +97,7 @@ export const updateOrderStatus = async (req, res) => {
       { _id: orderId, userId },
       updateData,
       { new: true }
-    );
+    ).populate("productId");
 
     res.status(200).json({
       message: "Order Status Updated",

@@ -104,7 +104,7 @@ function MeeshoAds() {
           Authorization: `Bearer ${localStorage.getItem("token")}`
         },
         body: JSON.stringify({
-          title: "Meesho Ads",
+          title: "Platform Ads",
           category: "Advertising",
           amount: Number(amount),
           date: new Date(date).toISOString(),
@@ -152,7 +152,7 @@ function MeeshoAds() {
           Authorization: `Bearer ${localStorage.getItem("token")}`
         },
         body: JSON.stringify({
-          title: "Meesho Ads",
+          title: "Platform Ads",
           category: "Advertising",
           amount: Number(editAmount),
           date: new Date(editDate).toISOString(),
@@ -218,6 +218,20 @@ function MeeshoAds() {
       const d = new Date(ad.date || ad.createdAt);
       const amountVal = ad.amount || 0;
 
+      // Try to parse order count from note first, otherwise fall back to database orders on that day
+      const noteMatch = ad.note && ad.note.match(/(\d+)\s*order/i);
+      let entryOrders = 0;
+      if (noteMatch) {
+        entryOrders = parseInt(noteMatch[1], 10);
+      } else {
+        const dateStr = d.toISOString().slice(0, 10);
+        entryOrders = orders.filter(o => {
+          if (o.paymentStatus === "Cancel") return false;
+          const oDate = new Date(o.date || o.createdAt).toISOString().slice(0, 10);
+          return oDate === dateStr;
+        }).length;
+      }
+
       // Cumulative stats
       totalAllTime += amountVal;
 
@@ -236,11 +250,13 @@ function MeeshoAds() {
         monthlyBreakdownMap[monthKey] = {
           monthStr: monthKey,
           total: 0,
-          entries: 0
+          entries: 0,
+          ordersCountSum: 0
         };
       }
       monthlyBreakdownMap[monthKey].total += amountVal;
       monthlyBreakdownMap[monthKey].entries += 1;
+      monthlyBreakdownMap[monthKey].ordersCountSum += entryOrders;
     });
 
     const avgDailyThisMonth = entriesCountThisMonth > 0 
@@ -251,13 +267,7 @@ function MeeshoAds() {
     const monthlyList = Object.values(monthlyBreakdownMap).sort((a, b) => {
       return new Date(b.monthStr) - new Date(a.monthStr);
     }).map(m => {
-      // Find orders count for this month
-      const totalMonthOrders = orders.filter(o => {
-        if (o.paymentStatus === "Cancel") return false;
-        const d = new Date(o.date || o.createdAt);
-        const monthKey = d.toLocaleString("en-US", { month: "long", year: "numeric" });
-        return monthKey === m.monthStr;
-      }).length;
+      const totalMonthOrders = m.ordersCountSum;
 
       return {
         ...m,
@@ -320,10 +330,10 @@ function MeeshoAds() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <div>
           <h2 style={{ fontSize: "24px", fontWeight: "700", display: "flex", alignItems: "center", gap: "10px", margin: 0 }}>
-            <FaBullhorn style={{ color: "var(--primary)" }} /> Meesho Ads Manager
+            <FaBullhorn style={{ color: "var(--primary)" }} /> Platform Ads Manager
           </h2>
           <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "4px" }}>
-            Track and analyze your daily Meesho promotion expenses
+            Track and analyze your daily promotion expenses
           </p>
         </div>
       </div>
@@ -604,7 +614,6 @@ function MeeshoAds() {
                     <tr style={{ borderBottom: "1px solid var(--border-color)", textAlign: "left" }}>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Date</th>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Spend (₹)</th>
-                      <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Orders</th>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Spend / Order (₹)</th>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Note</th>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textAlign: "right" }}>Actions</th>
@@ -615,12 +624,16 @@ function MeeshoAds() {
                       const adDate = new Date(ad.date || ad.createdAt);
                       const dateStr = adDate.toISOString().slice(0, 10);
                       
-                      // Count orders on this exact day
-                      const ordersCount = orders.filter(o => {
+                      // Count orders on this exact day from DB
+                      const dbOrdersCount = orders.filter(o => {
                         if (o.paymentStatus === "Cancel") return false;
                         const oDate = new Date(o.date || o.createdAt).toISOString().slice(0, 10);
                         return oDate === dateStr;
                       }).length;
+
+                      // Try to parse order count from note (e.g. "16 Order", "16 orders"), otherwise fall back to DB
+                      const noteMatch = ad.note && ad.note.match(/(\d+)\s*order/i);
+                      const ordersCount = noteMatch ? parseInt(noteMatch[1], 10) : dbOrdersCount;
                       
                       const avgPerOrder = ordersCount > 0 ? ad.amount / ordersCount : 0;
 
@@ -631,9 +644,6 @@ function MeeshoAds() {
                           </td>
                           <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--danger)", fontWeight: "600" }}>
                             ₹{ad.amount.toLocaleString("en-IN")}
-                          </td>
-                          <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--text-primary)", fontWeight: "600" }}>
-                            {ordersCount} {ordersCount === 1 ? "order" : "orders"}
                           </td>
                           <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--primary)", fontWeight: "600" }}>
                             {ordersCount > 0 ? `₹${avgPerOrder.toFixed(2)}` : "-"}

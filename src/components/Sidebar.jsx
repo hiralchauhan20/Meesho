@@ -12,7 +12,7 @@ function Sidebar({ onLogout }) {
     <div className="sidebar" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <h2>
         <FaBoxOpen style={{ color: "var(--primary)" }} /> 
-        Meesho<span>Manager</span>
+        Seller<span>Manager</span>
       </h2>
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -29,11 +29,11 @@ function Sidebar({ onLogout }) {
         </Link>
 
         <Link to="/ads" className={isActive("/ads")}>
-          <FaBullhorn /> Meesho Ads
+          <FaBullhorn /> Platform Ads
         </Link>
 
         <Link to="/claims" className={isActive("/claims")}>
-          <FaFileInvoice /> Meesho Claims
+          <FaFileInvoice /> Platform Claims
         </Link>
       </div>
 
@@ -58,7 +58,7 @@ function Sidebar({ onLogout }) {
           }}
           className="logout-btn-hover"
         >
-          <FaSignOutAlt /> Sign Out Shop
+          <FaSignOutAlt /> Sign Out Account
         </button>
       </div>
     </div>

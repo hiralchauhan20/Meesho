@@ -3,6 +3,8 @@ import { FaPlus, FaTrash, FaEdit, FaDownload, FaCoins, FaWallet, FaFileInvoiceDo
 import ConfirmModal from "../components/ConfirmModal";
 import { API_URL } from "../config";
 
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
 const calculateOrderProfit = (o) => {
   const paymentStatus = o.paymentStatus || "Pending";
   const claimAmt = o.claimAmount || 0;
@@ -29,10 +31,11 @@ const calculateOrderProfit = (o) => {
   }
   
   const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
+  const buyingVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
   const gstRate = o.gst || o.productId?.gst || 0;
   const gstAmount = (sellingVal * gstRate) / 100;
   const qtyVal = o.quantity || 1;
-  return (sellingVal - gstAmount) * qtyVal;
+  return (sellingVal - gstAmount - buyingVal) * qtyVal;
 };
 
 function Reports() {
@@ -44,15 +47,23 @@ function Reports() {
   const [error, setError] = useState("");
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-
   // Interactive Chart States
   const [activeMetric, setActiveMetric] = useState("income");
   const [hoveredMonthIndex, setHoveredMonthIndex] = useState(null);
   const [ignoreTrigger, setIgnoreTrigger] = useState(0);
   
   // Trend Cards View Mode States (Day-Wise vs Monthly)
-  const [trendViewMode, setTrendViewMode] = useState("daily"); // "daily" or "monthly"
-  const [trendMonth, setTrendMonth] = useState(new Date().getMonth()); // 0-11
+  const [trendViewMode, setTrendViewMode] = useState("monthly"); // Default to monthly summary (yearly view)
+  const [selectedMonth, setSelectedMonth] = useState("All");
+
+  const trendMonth = selectedMonth === "All" ? new Date().getMonth() : Number(selectedMonth);
+
+  const handleSetTrendViewMode = (mode) => {
+    setTrendViewMode(mode);
+    if (mode === "daily" && selectedMonth === "All") {
+      setSelectedMonth(String(new Date().getMonth()));
+    }
+  };
 
   // Form states for extra expenses
   const [title, setTitle] = useState("");
@@ -244,7 +255,9 @@ function Reports() {
           gst: 0,
           otherExpenses: 0,
           adsExpenses: 0,
-          orderProfit: 0
+          returnCost: 0,
+          cancellationCost: 0,
+          productCost: 0
         };
       }
 
@@ -252,15 +265,30 @@ function Reports() {
       const gstRate = o.gst || o.productId?.gst || 0;
       const qtyVal = o.quantity || 1;
       const gstAmount = (sellingVal * gstRate) / 100;
-      const profit = calculateOrderProfit(o);
       const payStatus = o.paymentStatus || "Pending";
+      const claimAmt = o.claimAmount || 0;
       
-      monthlyData[monthKey].orderProfit += profit;
+      let orderGst = 0;
+      let orderReturnCost = 0;
+      let orderCancellationCost = 0;
+      let orderProductCost = 0;
       
       if (payStatus === "Complete") {
         monthlyData[monthKey].sales += sellingVal * qtyVal;
-        monthlyData[monthKey].gst += gstAmount * qtyVal;
+        orderGst = gstAmount * qtyVal;
+        orderProductCost = (o.purchasePrice || 0) * qtyVal;
+      } else if (payStatus === "Cancel" || payStatus === "RTO Returned") {
+        orderCancellationCost = 5;
+      } else if (payStatus === "Return") {
+        orderReturnCost = (o.claimStatus === "Approved") ? (157 - claimAmt) : 157;
+      } else if (payStatus === "Wrong Return") {
+        orderReturnCost = (o.claimStatus === "Approved") ? -claimAmt : 0;
       }
+      
+      monthlyData[monthKey].gst += orderGst;
+      monthlyData[monthKey].productCost += orderProductCost;
+      monthlyData[monthKey].returnCost += orderReturnCost;
+      monthlyData[monthKey].cancellationCost += orderCancellationCost;
     });
 
     // 2. Process extra expenses
@@ -275,7 +303,9 @@ function Reports() {
           gst: 0,
           otherExpenses: 0,
           adsExpenses: 0,
-          orderProfit: 0
+          returnCost: 0,
+          cancellationCost: 0,
+          productCost: 0
         };
       }
 
@@ -298,7 +328,9 @@ function Reports() {
           gst: 0,
           otherExpenses: 0,
           adsExpenses: 0,
-          orderProfit: 0
+          returnCost: 0,
+          cancellationCost: 0,
+          productCost: 0
         };
       }
 
@@ -309,8 +341,8 @@ function Reports() {
     return Object.keys(monthlyData)
       .map((month) => {
         const item = monthlyData[month];
-        const totalCost = item.purchases + item.gst + item.otherExpenses + item.adsExpenses;
-        const netProfit = item.orderProfit - (item.purchases + item.otherExpenses + item.adsExpenses);
+        const totalCost = item.productCost + item.purchases + item.gst + item.otherExpenses + item.adsExpenses + item.returnCost + item.cancellationCost;
+        const netProfit = item.sales - item.gst - item.productCost - item.purchases - item.adsExpenses - item.otherExpenses - item.returnCost - item.cancellationCost;
         return {
           month,
           ...item,
@@ -327,9 +359,24 @@ function Reports() {
     return monthlyList.filter((m) => {
       const parts = m.month.split(" ");
       const year = Number(parts[parts.length - 1]);
-      return year === selectedYear;
+      const isYearMatch = year === selectedYear;
+      if (!isYearMatch) return false;
+
+      if (selectedMonth !== "All") {
+        const monthName = parts[0];
+        // MONTHS array contains short names like "Jan", "Feb", but the key might be "January", "February"
+        // Let's check how monthKey is formatted in getMonthlyBreakdown:
+        // const monthKey = dateObj.toLocaleString("en-US", { month: "long", year: "numeric" });
+        // It uses "long" month name, e.g. "July 2026".
+        // So parts[0] is e.g. "July".
+        // Let's convert MONTHS index to a long month name or map it.
+        // We can do:
+        const longMonthName = new Date(2000, Number(selectedMonth), 1).toLocaleString("en-US", { month: "long" });
+        return monthName === longMonthName;
+      }
+      return true;
     });
-  }, [monthlyList, selectedYear]);
+  }, [monthlyList, selectedYear, selectedMonth]);
 
   // Cumulative totals
   const getCumulativeTotals = () => {
@@ -338,18 +385,26 @@ function Reports() {
     let gst = 0;
     let otherExpenses = 0;
     let adsExpenses = 0;
+    let returnCost = 0;
+    let cancellationCost = 0;
     let netProfit = 0;
+    let productCost = 0;
 
-    monthlyList.forEach((m) => {
+    const targetMonths = filteredMonthlyList;
+
+    targetMonths.forEach((m) => {
       sales += m.sales;
       purchases += m.purchases;
       gst += m.gst;
       otherExpenses += m.otherExpenses;
       adsExpenses += m.adsExpenses || 0;
+      returnCost += m.returnCost || 0;
+      cancellationCost += m.cancellationCost || 0;
       netProfit += m.netProfit;
+      productCost += m.productCost || 0;
     });
 
-    return { sales, purchases, gst, otherExpenses, adsExpenses, netProfit };
+    return { sales, purchases, gst, otherExpenses, adsExpenses, returnCost, cancellationCost, netProfit, productCost };
   };
 
   const totals = getCumulativeTotals();
@@ -362,6 +417,10 @@ function Reports() {
     let approvedAmount = 0;
 
     orders.forEach((o) => {
+      const d = new Date(o.date || o.createdAt);
+      if (d.getFullYear() !== selectedYear) return;
+      if (selectedMonth !== "All" && d.getMonth() !== Number(selectedMonth)) return;
+
       if (o.claimStatus && o.claimStatus !== "No Claim") {
         totalClaims++;
         if (o.claimStatus === "Pending") {
@@ -376,7 +435,7 @@ function Reports() {
     });
 
     return { totalClaims, pendingClaims, approvedClaims, rejectedClaims, approvedAmount };
-  }, [orders]);
+  }, [orders, selectedYear, selectedMonth]);
 
   const activeAlerts = useMemo(() => {
     let ignoredMap = {};
@@ -422,8 +481,6 @@ function Reports() {
     expenses.forEach((e) => years.add(new Date(e.date || e.createdAt).getFullYear()));
     return Array.from(years).sort((a, b) => b - a);
   };
-
-  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
   const getYearlyChartData = () => {
     const data = MONTHS.map((m) => ({
@@ -683,17 +740,17 @@ function Reports() {
 
   const exportCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "Monthly Profit and Loss Statement - Meesho Manager\n\n";
-    csvContent += "Month,Total Sales (Revenue),Total Investments,GST Cost,Ads Cost,Other Expenses,Net Profit/Loss\n";
+    csvContent += "Monthly Profit and Loss Statement - Seller Manager\n\n";
+    csvContent += "Month,Total Sales (Revenue),Product Cost (COGS),GST Cost,Ads Cost,Other Expenses,Return Cost,Cancellation Cost,Net Profit/Loss\n";
 
     monthlyList.forEach((m) => {
-      csvContent += `"${m.month}",${m.sales.toFixed(2)},${m.purchases.toFixed(2)},${m.gst.toFixed(2)},${(m.adsExpenses || 0).toFixed(2)},${m.otherExpenses.toFixed(2)},${m.netProfit.toFixed(2)}\n`;
+      csvContent += `"${m.month}",${m.sales.toFixed(2)},${(m.productCost || 0).toFixed(2)},${m.gst.toFixed(2)},${(m.adsExpenses || 0).toFixed(2)},${m.otherExpenses.toFixed(2)},${(m.returnCost || 0).toFixed(2)},${(m.cancellationCost || 0).toFixed(2)},${m.netProfit.toFixed(2)}\n`;
     });
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `meesho_monthly_pl_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `monthly_pl_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -803,8 +860,8 @@ function Reports() {
             <span className="stat-card-title">Total Investments</span>
             <div className="stat-card-icon"><FaWallet /></div>
           </div>
-          <div className="stat-card-value">₹{totals.purchases.toLocaleString()}</div>
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total stock/inventory investment cost</div>
+          <div className="stat-card-value">₹{(totals.purchases + totals.otherExpenses + totals.adsExpenses).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total stock, ads, and setup investment cost</div>
         </div>
 
         <div className="stat-card" style={{ "--card-accent": "var(--danger)" }}>
@@ -812,7 +869,7 @@ function Reports() {
             <span className="stat-card-title">Total GST</span>
             <div className="stat-card-icon"><FaWallet /></div>
           </div>
-          <div className="stat-card-value">₹{totals.gst.toLocaleString()}</div>
+          <div className="stat-card-value">₹{totals.gst.toLocaleString(undefined, { maximumFractionDigits: 1 })}</div>
           <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total cumulative GST cost</div>
         </div>
 
@@ -821,15 +878,15 @@ function Reports() {
             <span className="stat-card-title">Net Profit</span>
             <div className="stat-card-icon"><FaFileInvoiceDollar /></div>
           </div>
-          <div className="stat-card-value">₹{totals.netProfit.toLocaleString()}</div>
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Revenue minus all expenses</div>
+          <div className="stat-card-value">₹{totals.netProfit.toLocaleString(undefined, { maximumFractionDigits: 1 })}</div>
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Order revenue minus product, return, and cancellation costs</div>
         </div>
       </div>
 
-      {/* Meesho Claims Overview Cards */}
+      {/* Platform Claims Overview Cards */}
       <div style={{ marginTop: "24px" }}>
         <h3 style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
-          📊 Meesho Claims Summary
+          📊 Platform Claims Summary
         </h3>
         <div className="cards" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px" }}>
           <div className="stat-card" style={{ "--card-accent": "var(--primary)" }}>
@@ -847,7 +904,7 @@ function Reports() {
               <div className="stat-card-icon"><FaExclamationTriangle /></div>
             </div>
             <div className="stat-card-value">{claimStats.pendingClaims}</div>
-            <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Awaiting response from Meesho</div>
+            <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Awaiting response from Platforms</div>
           </div>
 
           <div className="stat-card" style={{ "--card-accent": "var(--success)" }}>
@@ -1173,61 +1230,62 @@ function Reports() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-          {trendViewMode === "daily" && (
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)" }}>Month:</span>
-                <select
-                  value={trendMonth}
-                  onChange={(e) => setTrendMonth(Number(e.target.value))}
-                  style={{
-                    height: "36px",
-                    padding: "0 12px",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    background: "var(--bg-secondary)",
-                    color: "var(--text-primary)",
-                    border: "1px solid var(--border-color)",
-                    cursor: "pointer"
-                  }}
-                >
-                  {MONTHS.map((m, idx) => (
-                    <option key={m} value={idx}>{m}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)" }}>Year:</span>
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(Number(e.target.value))}
-                  style={{
-                    height: "36px",
-                    padding: "0 12px",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    background: "var(--bg-secondary)",
-                    color: "var(--text-primary)",
-                    border: "1px solid var(--border-color)",
-                    cursor: "pointer"
-                  }}
-                >
-                  {(availableYears.length > 0 ? availableYears : [new Date().getFullYear()]).map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)" }}>Month:</span>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                style={{
+                  height: "36px",
+                  padding: "0 12px",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border-color)",
+                  cursor: "pointer"
+                }}
+              >
+                {trendViewMode === "monthly" && (
+                  <option value="All">All Months</option>
+                )}
+                {MONTHS.map((m, idx) => (
+                  <option key={m} value={String(idx)}>{m}</option>
+                ))}
+              </select>
             </div>
-          )}
+
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)" }}>Year:</span>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                style={{
+                  height: "36px",
+                  padding: "0 12px",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border-color)",
+                  cursor: "pointer"
+                }}
+              >
+                {(availableYears.length > 0 ? availableYears : [new Date().getFullYear()]).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           {/* Toggle buttons for Day-wise vs Monthly */}
           <div style={{ display: "flex", background: "rgba(255, 255, 255, 0.05)", padding: "3px", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
             <button
               type="button"
-              onClick={() => setTrendViewMode("daily")}
+              onClick={() => handleSetTrendViewMode("daily")}
               style={{
                 padding: "6px 14px",
                 borderRadius: "6px",
@@ -1244,7 +1302,7 @@ function Reports() {
             </button>
             <button
               type="button"
-              onClick={() => setTrendViewMode("monthly")}
+              onClick={() => handleSetTrendViewMode("monthly")}
               style={{
                 padding: "6px 14px",
                 borderRadius: "6px",
@@ -1370,17 +1428,19 @@ function Reports() {
                   <tr>
                     <th>Month</th>
                     <th>Sales (₹)</th>
-                    <th>Investment (₹)</th>
+                    <th>Product Cost (₹)</th>
                     <th>GST Cost (₹)</th>
                     <th>Ads Cost (₹)</th>
                     <th>Other Exp (₹)</th>
+                    <th>Return Cost (₹)</th>
+                    <th>Cancel Cost (₹)</th>
                     <th>Net Profit (₹)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredMonthlyList.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: "center", color: "var(--text-muted)", padding: "30px" }}>
+                      <td colSpan="9" style={{ textAlign: "center", color: "var(--text-muted)", padding: "30px" }}>
                         No ledger entries found for {selectedYear}. Record sales in the Sales Ledger tab first!
                       </td>
                     </tr>
@@ -1389,10 +1449,12 @@ function Reports() {
                       <tr key={index}>
                         <td style={{ fontWeight: "700", color: "var(--text-primary)" }}>{m.month}</td>
                         <td>₹{m.sales.toLocaleString()}</td>
-                        <td>₹{m.purchases.toLocaleString()}</td>
+                        <td>₹{(m.productCost || 0).toLocaleString()}</td>
                         <td>₹{m.gst.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
                         <td>₹{(m.adsExpenses || 0).toLocaleString()}</td>
                         <td>₹{m.otherExpenses.toLocaleString()}</td>
+                        <td>₹{(m.returnCost || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
+                        <td>₹{(m.cancellationCost || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
                         <td style={{ fontWeight: "800", fontSize: "15px", color: m.netProfit >= 0 ? "var(--success)" : "var(--danger)" }}>
                           ₹{m.netProfit.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                         </td>

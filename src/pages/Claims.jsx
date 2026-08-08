@@ -152,7 +152,7 @@ function Claims() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <div>
           <h2 style={{ fontSize: "24px", fontWeight: "700", display: "flex", alignItems: "center", gap: "10px", margin: 0, color: "var(--text-primary)" }}>
-            <FaFileInvoiceDollar style={{ color: "var(--primary)" }} /> Meesho Claims Tracker
+            <FaFileInvoiceDollar style={{ color: "var(--primary)" }} /> Platform Claims Tracker
           </h2>
           <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "4px" }}>
             Track details of all returns, filed wrong returns, approved claim amounts, and pending requests
@@ -183,7 +183,7 @@ function Claims() {
             <div className="stat-card-icon"><FaExclamationTriangle /></div>
           </div>
           <div className="stat-card-value">{claimStats.pendingClaims}</div>
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Awaiting response from Meesho</div>
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Awaiting response from Platforms</div>
         </div>
 
         <div className="stat-card" style={{ "--card-accent": "var(--success)" }}>
@@ -399,7 +399,7 @@ function Claims() {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: "450px" }}>
             <div className="modal-header">
-              <h3 className="modal-title">Edit Meesho Claim</h3>
+              <h3 className="modal-title">Edit Claim</h3>
               <button className="modal-close" onClick={() => setEditingOrder(null)}>&times;</button>
             </div>
             <form onSubmit={handleEditSubmit}>

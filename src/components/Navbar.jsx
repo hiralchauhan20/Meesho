@@ -13,7 +13,7 @@ function Navbar({ toggleTheme, theme }) {
       case "/investments":
         return "Investment & Bulk Purchase Ledger";
       default:
-        return "Meesho Manager";
+        return "Seller Manager";
     }
   };
 
@@ -22,7 +22,8 @@ function Navbar({ toggleTheme, theme }) {
       const userStr = localStorage.getItem("user");
       if (userStr) {
         const user = JSON.parse(userStr);
-        return user.name || "HKC Collection";
+        const platform = user.platform ? ` - ${user.platform}` : "";
+        return `${user.name || "HKC Collection"}${platform}`;
       }
     } catch (e) {
       console.error(e);

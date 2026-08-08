@@ -70,22 +70,7 @@ const calculateOrderProfit = (o) => {
   return (sellingVal - purchaseVal - gstAmount) * qtyVal;
 };
 
-const getDispatchHealth = (o) => {
-  const status = o.paymentStatus || "Pending";
-  const dispatch = o.dispatchStatus || "Pending";
-  if (dispatch === "Dispatched" || status !== "Pending") {
-    return { label: "Dispatched", color: "#10b981", bg: "rgba(16, 185, 129, 0.15)" };
-  }
-  const orderDate = new Date(o.date || o.createdAt);
-  const timeDiff = new Date() - orderDate;
-  const hoursDiff = timeDiff / (1000 * 60 * 60);
-  
-  if (hoursDiff < 48) {
-    return { label: "Breaching Soon", color: "#f59e0b", bg: "rgba(245, 158, 11, 0.15)" };
-  } else {
-    return { label: "Breached", color: "#ef4444", bg: "rgba(239, 68, 68, 0.15)" };
-  }
-};
+
 
 function Ledger() {
   const [orders, setOrders] = useState([]);
@@ -101,11 +86,11 @@ function Ledger() {
   const [filterCourier, setFilterCourier] = useState("");
   const [filterCustomerState, setFilterCustomerState] = useState("");
   const [filterOrderNo, setFilterOrderNo] = useState("");
-  const [filterDispatchSLA, setFilterDispatchSLA] = useState("");
+
 
   // Form states for fast entry
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // Default today
-  const [orderNo, setOrderNo] = useState(""); // Meesho Order ID
+  const [orderNo, setOrderNo] = useState(""); // Order ID
   const [productName, setProductName] = useState("");
   const [customerState, setCustomerState] = useState("Gujarat"); // India State
   const [purchasePrice, setPurchasePrice] = useState("");
@@ -317,7 +302,7 @@ function Ledger() {
         courierPartner,
         paymentStatus: "Pending",
         date: new Date(date).toISOString(),
-        customerName: "Meesho Buyer",
+        customerName: "Customer",
         status: "Completed",
         deliveryStatus: "Delivered"
       };
@@ -394,35 +379,19 @@ function Ledger() {
       });
       if (!res.ok) throw new Error("Failed to update status");
 
-      setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, paymentStatus: newStatus } : o)));
+      const data = await res.json();
+      setOrders((prev) => prev.map((o) => (o._id === id ? data.order : o)));
       fetchStockSummary();
     } catch (err) {
       showAlert(err.message, "Error");
     }
   };
 
-  const handleDispatchChange = async (id, newDispatchStatus) => {
-    try {
-      const res = await fetch(`${API_URL}/api/orders/${id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        body: JSON.stringify({ dispatchStatus: newDispatchStatus })
-      });
-      if (!res.ok) throw new Error("Failed to update dispatch status");
 
-      setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, dispatchStatus: newDispatchStatus } : o)));
-      fetchStockSummary();
-    } catch (err) {
-      showAlert(err.message, "Error");
-    }
-  };
 
   const exportCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "Meesho Accounts - Spreadsheet\n\n";
+    csvContent += "Accounts - Spreadsheet\n\n";
     csvContent += "Date,Order No,AWB ID,Product Name,State,Purchase Price (Buying),Selling Price,Quantity,GST (%),Courier Partner,Payment Status,Net Profit\n";
 
     orders.forEach((o) => {
@@ -445,7 +414,7 @@ function Ledger() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `meesho_accounts_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `accounts_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -510,18 +479,9 @@ function Ledger() {
         const orderNoStr = (o.orderNo || "").toLowerCase();
         if (!orderNoStr.includes(filterOrderNo.trim().toLowerCase())) return false;
       }
-      // Dispatch SLA / Ghare Product filter
-      if (filterDispatchSLA) {
-        const health = getDispatchHealth(o);
-        if (filterDispatchSLA === "At Home") {
-          if (health.label === "Dispatched") return false;
-        } else {
-          if (health.label !== filterDispatchSLA) return false;
-        }
-      }
       return true;
     });
-  }, [orders, filterDate, filterStatus, filterProduct, filterCourier, filterCustomerState, filterOrderNo, filterDispatchSLA]);
+  }, [orders, filterDate, filterStatus, filterProduct, filterCourier, filterCustomerState, filterOrderNo]);
 
   // Stats for filtered results
   const filteredStats = useMemo(() => {
@@ -557,29 +517,7 @@ function Ledger() {
     return { totalClaims, pendingClaims, approvedClaims, rejectedClaims, approvedAmount };
   }, [orders]);
 
-  const dispatchHealthPct = useMemo(() => {
-    const activeOrders = orders.filter(o => o.paymentStatus !== "Cancel");
-    if (activeOrders.length === 0) return 100;
-    
-    let withinSla = 0;
-    activeOrders.forEach(o => {
-      const status = o.paymentStatus || "Pending";
-      const dispatch = o.dispatchStatus || "Pending";
-      if (dispatch === "Dispatched" || status !== "Pending") {
-        withinSla++; // Already dispatched
-      } else {
-        const orderDate = new Date(o.date || o.createdAt);
-        const hours = (new Date() - orderDate) / (1000 * 60 * 60);
-        if (hours <= 48) {
-          withinSla++;
-        }
-      }
-    });
-    
-    return Math.round((withinSla / activeOrders.length) * 100);
-  }, [orders]);
-
-  const hasFilter = filterDate || filterStatus || filterProduct || filterCourier || filterCustomerState || filterOrderNo.trim() || filterDispatchSLA;
+  const hasFilter = filterDate || filterStatus || filterProduct || filterCourier || filterCustomerState || filterOrderNo.trim();
   const clearFilters = () => {
     setFilterProduct("");
     setFilterDate("");
@@ -587,7 +525,6 @@ function Ledger() {
     setFilterCourier("");
     setFilterCustomerState("");
     setFilterOrderNo("");
-    setFilterDispatchSLA("");
   };
 
   return (
@@ -617,107 +554,6 @@ function Ledger() {
 
 
 
-      {/* Dispatch Health Widget */}
-      {(() => {
-        const healthPos = (() => {
-          const pct = dispatchHealthPct;
-          if (pct >= 95) {
-            return ((100 - pct) / 5) * 33.3;
-          } else if (pct >= 75) {
-            return 33.3 + ((95 - pct) / 20) * 33.3;
-          } else {
-            return 66.6 + ((75 - Math.max(pct, 0)) / 75) * 33.3;
-          }
-        })();
-
-        const healthStatus = (() => {
-          const pct = dispatchHealthPct;
-          if (pct >= 95) {
-            return { text: "excellent standing", bg: "#eafaf1", color: "#1b5e20", borderColor: "#a3cfb4" };
-          } else if (pct >= 75) {
-            return { text: "catalogs at risk", bg: "#fff5eb", color: "#c56a28", borderColor: "#fcdcb6" };
-          } else {
-            return { text: "shipping blocked", bg: "#fdf2f2", color: "#de3838", borderColor: "#f9c9c9" };
-          }
-        })();
-
-        return (
-          <div 
-            style={{
-              background: "var(--glass-bg)",
-              border: "1px solid var(--border-color)",
-              borderRadius: "12px",
-              padding: "24px",
-              marginBottom: "20px",
-              boxShadow: "var(--glass-shadow)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center"
-            }}
-          >
-            <div style={{ width: "100%", maxWidth: "600px" }}>
-              <h3 style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 16px 0", textAlign: "center" }}>
-                📦 Dispatch Health Status
-              </h3>
-
-              {/* Floating Tooltip Pointer Box */}
-              <div style={{ position: "relative", height: "40px", marginBottom: "8px" }}>
-                <div 
-                  style={{
-                    position: "absolute",
-                    left: `${healthPos}%`,
-                    transform: "translateX(-50%)",
-                    background: healthStatus.bg,
-                    color: healthStatus.color,
-                    border: `1px solid ${healthStatus.borderColor}`,
-                    padding: "6px 12px",
-                    borderRadius: "6px",
-                    fontSize: "12px",
-                    fontWeight: "700",
-                    whiteSpace: "nowrap",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                    transition: "all 0.3s ease"
-                  }}
-                >
-                  {dispatchHealthPct}% dispatch health – {healthStatus.text}
-                  {/* Down pointer arrow */}
-                  <div style={{
-                    position: "absolute",
-                    bottom: "-4px",
-                    left: "50%",
-                    transform: "translateX(-50%) rotate(45deg)",
-                    width: "7px",
-                    height: "7px",
-                    background: healthStatus.bg,
-                    borderRight: `1px solid ${healthStatus.borderColor}`,
-                    borderBottom: `1px solid ${healthStatus.borderColor}`
-                  }} />
-                </div>
-              </div>
-
-              {/* 3-Segment Progress Bar */}
-              <div style={{ display: "flex", width: "100%", height: "20px", borderRadius: "10px", overflow: "hidden", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.2)" }}>
-                <div style={{ flex: 1, background: "#c2ecc1", color: "#1b5e20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700" }}>
-                  Good
-                </div>
-                <div style={{ flex: 1, background: "#fcdcb6", color: "#e65100", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700" }}>
-                  At Risk
-                </div>
-                <div style={{ flex: 1, background: "#f9c9c9", color: "#b71c1c", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700" }}>
-                  Blocked
-                </div>
-              </div>
-
-              {/* Labels below segments */}
-              <div style={{ display: "flex", width: "100%", justifyContent: "space-between", fontSize: "11px", color: "var(--text-secondary)", fontWeight: "600", marginTop: "8px" }}>
-                <div style={{ flex: 1, textAlign: "center" }}>100% - 95%</div>
-                <div style={{ flex: 1, textAlign: "center" }}>95% - 75%</div>
-                <div style={{ flex: 1, textAlign: "center" }}>Less than 75%</div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Search & Filter Bar */}
       <div style={{
@@ -828,20 +664,7 @@ function Ledger() {
             </select>
           </div>
 
-          {/* Dispatch SLA Filter */}
-          <div>
-            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Dispatch SLA</label>
-            <select
-              value={filterDispatchSLA}
-              onChange={(e) => setFilterDispatchSLA(e.target.value)}
-              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
-            >
-              <option value="">All Orders</option>
-              <option value="At Home">Pending Dispatch (All)</option>
-              <option value="Breaching Soon">Breaching Soon</option>
-              <option value="Breached">Breached</option>
-            </select>
-          </div>
+
 
           {/* Clear Button Container */}
           <div style={{ display: "flex", alignItems: "flex-end", height: "38px" }}>
@@ -1023,7 +846,7 @@ function Ledger() {
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Selling Price (₹)</label>
-            <input type="number" min="0" placeholder="Meesho selling price" value={sellingPrice} onChange={(e) => setSellingPrice(e.target.value)} required style={{ width: "100%" }} />
+            <input type="number" min="0" placeholder="Selling price" value={sellingPrice} onChange={(e) => setSellingPrice(e.target.value)} required style={{ width: "100%" }} />
           </div>
 
           {/* Row 3: Metrics & Insert */}
@@ -1113,8 +936,7 @@ function Ledger() {
                 <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>GST</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Courier</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Payment</th>
-                <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>Dispatch Health</th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Meesho Claim</th>
+                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Platform Claim</th>
                 <th style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px" }}>Net Profit (₹)</th>
                 <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>Action</th>
               </tr>
@@ -1122,7 +944,7 @@ function Ledger() {
             <tbody>
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="15" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
+                  <td colSpan="14" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
                     {orders.length === 0 ? "No transactions logged in your accounts. Insert a row above to get started." : "No orders match your search/filter. Try different criteria or clear filters."}
                   </td>
                 </tr>
@@ -1229,51 +1051,7 @@ function Ledger() {
                         </select>
                       </td>
 
-                      {/* Dispatch Health badge */}
-                      <td style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>
-                        {(() => {
-                          const health = getDispatchHealth(o);
-                          const isPendingForDispatch = (o.dispatchStatus || "Pending") === "Pending" && o.paymentStatus === "Pending";
-                          const isLocked = isOrderLocked(o);
-                          
-                          return (
-                            <span 
-                              onClick={() => {
-                                if (isPendingForDispatch && !isLocked) {
-                                  handleDispatchChange(o._id, "Dispatched");
-                                }
-                              }}
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: "6px",
-                                fontSize: "11px",
-                                fontWeight: "700",
-                                backgroundColor: health.bg,
-                                color: health.color,
-                                display: "inline-block",
-                                cursor: (isPendingForDispatch && !isLocked) ? "pointer" : "default",
-                                transition: "all 0.15s ease",
-                                border: (isPendingForDispatch && !isLocked) ? "1px dashed rgba(255,255,255,0.15)" : "none"
-                              }}
-                              title={isPendingForDispatch && !isLocked ? "Click to instantly mark as Dispatched" : ""}
-                              onMouseEnter={(e) => {
-                                if (isPendingForDispatch && !isLocked) {
-                                  e.currentTarget.style.transform = "scale(1.05)";
-                                  e.currentTarget.style.boxShadow = "0 0 8px rgba(255, 255, 255, 0.1)";
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (isPendingForDispatch && !isLocked) {
-                                  e.currentTarget.style.transform = "scale(1)";
-                                  e.currentTarget.style.boxShadow = "none";
-                                }
-                              }}
-                            >
-                              {health.label}
-                            </span>
-                          );
-                        })()}
-                      </td>
+
 
                       {/* Meesho Claim status and amount */}
                       <td style={{ padding: "14px 16px", fontSize: "13px" }}>
@@ -1388,7 +1166,7 @@ function Ledger() {
                   <td style={{ padding: "16px", textAlign: "center", fontSize: "13px", color: "var(--text-primary)" }}>
                     {stats.totalQty}
                   </td>
-                  <td colSpan="5" style={{ padding: "16px" }}></td>
+                  <td colSpan="4" style={{ padding: "16px" }}></td>
                   <td 
                     style={{ 
                       padding: "16px", 
@@ -1506,7 +1284,7 @@ function Ledger() {
                 </div>
 
                 <div className="form-full">
-                  <label>Meesho Claim Status</label>
+                  <label>Platform Claim Status</label>
                   <select value={editClaimStatus} onChange={(e) => setEditClaimStatus(e.target.value)}>
                     <option value="No Claim">No Claim</option>
                     <option value="Pending">Pending</option>

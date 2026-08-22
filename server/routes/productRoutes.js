@@ -1,4 +1,5 @@
 import express from "express";
+import authMiddleware from "../middleware/authMiddleware.js";
 import {
   addProduct,
   getProducts,
@@ -10,18 +11,18 @@ import {
 const router = express.Router();
 
 // Add Product API
-router.post("/add", addProduct);
+router.post("/add", authMiddleware, addProduct);
 
 // Get All Products API
-router.get("/", getProducts);
+router.get("/", authMiddleware, getProducts);
 
 // Delete Product API
-router.delete("/:id", deleteProduct);
+router.delete("/:id", authMiddleware, deleteProduct);
 
 // Update Product API
-router.put("/:id", updateProduct);
+router.put("/:id", authMiddleware, updateProduct);
 
 // Profit Calculation API
-router.get("/profit/:id", calculateProfit);
+router.get("/profit/:id", authMiddleware, calculateProfit);
 
 export default router;

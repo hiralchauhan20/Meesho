@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Investment from "./pages/Investment";
 import MeeshoAds from "./pages/MeeshoAds";
 import Claims from "./pages/Claims";
+import Products from "./pages/Products";
 
 import "./App.css";
 
@@ -90,6 +91,7 @@ function App() {
             <Route path="/investments" element={<Investment />} />
             <Route path="/ads" element={<MeeshoAds />} />
             <Route path="/claims" element={<Claims />} />
+            <Route path="/products" element={<Products />} />
           </Routes>
         </div>
       </div>

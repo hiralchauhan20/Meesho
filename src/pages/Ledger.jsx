@@ -75,6 +75,7 @@ const calculateOrderProfit = (o) => {
 function Ledger() {
   const [orders, setOrders] = useState([]);
   const [stocks, setStocks] = useState([]);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -194,6 +195,16 @@ function Ledger() {
 
   const handleProductNameChange = (value) => {
     setProductName(value);
+
+    // Check if there is an exact match in the custom products list
+    const matchedProduct = products.find(p => p.productName.toLowerCase() === value.trim().toLowerCase());
+    if (matchedProduct) {
+      setPurchasePrice(String(matchedProduct.purchasePrice));
+      setSellingPrice(String(matchedProduct.sellingPrice));
+      setGst(String(matchedProduct.gst || 18));
+      return;
+    }
+
     const lower = value.toLowerCase();
     
     // Autofill Buying Price based on matching rules
@@ -215,7 +226,24 @@ function Ledger() {
   useEffect(() => {
     fetchOrders();
     fetchStockSummary();
+    fetchProducts();
   }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/products`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch products:", err);
+    }
+  };
 
   const fetchStockSummary = async () => {
     try {
@@ -828,16 +856,23 @@ function Ledger() {
               required 
               style={{ width: "100%" }} 
             />
-            <datalist id="product-suggestions">
-              <option value="Air Bra (Pack of 3)" />
-              <option value="Air Bra (Pack of 6)" />
-              <option value="Megical Bra (Pack of 3)" />
-              <option value="Megical Bra (Pack of 6)" />
-              <option value="Shapewear Black" />
-              <option value="Shapewear Black (Pack of 2)" />
-              <option value="Shapewear Cream" />
-              <option value="Shapewear Cream (Pack of 2)" />
-              <option value="Shapewear Black and Cream (Pack of 2)" />
+             <datalist id="product-suggestions">
+              {products.map((p) => (
+                <option key={p._id} value={p.productName} />
+              ))}
+              {products.length === 0 && (
+                <>
+                  <option value="Air Bra (Pack of 3)" />
+                  <option value="Air Bra (Pack of 6)" />
+                  <option value="Megical Bra (Pack of 3)" />
+                  <option value="Megical Bra (Pack of 6)" />
+                  <option value="Shapewear Black" />
+                  <option value="Shapewear Black (Pack of 2)" />
+                  <option value="Shapewear Cream" />
+                  <option value="Shapewear Cream (Pack of 2)" />
+                  <option value="Shapewear Black and Cream (Pack of 2)" />
+                </>
+              )}
             </datalist>
           </div>
           <div>

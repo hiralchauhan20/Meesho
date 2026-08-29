@@ -123,6 +123,7 @@ function Ledger() {
   // Custom Modal States
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
@@ -501,8 +502,11 @@ function Ledger() {
 
           const matchedP = autoMatchProduct(pageText, products);
           
-          const isDuplicateOrder = orderNoMatch && orders.some(o => o.orderNo && o.orderNo.trim() === orderNoMatch.trim());
-          const isDuplicateAwb = awbIdMatch && orders.some(o => o.awbId && o.awbId.trim() === awbIdMatch.trim());
+          const isDuplicateInCurrentUpload = orderNoMatch && parsedRows.some(row => row.orderNo && row.orderNo.trim() === orderNoMatch.trim());
+          const isAwbDuplicateInCurrentUpload = awbIdMatch && parsedRows.some(row => row.awbId && row.awbId.trim() === awbIdMatch.trim());
+
+          const isDuplicateOrder = (orderNoMatch && orders.some(o => o.orderNo && o.orderNo.trim() === orderNoMatch.trim())) || isDuplicateInCurrentUpload;
+          const isDuplicateAwb = (awbIdMatch && orders.some(o => o.awbId && o.awbId.trim() === awbIdMatch.trim())) || isAwbDuplicateInCurrentUpload;
 
           parsedRows.push({
             tempId: `parsed-${fIdx}-${i}-${Date.now()}-${Math.random()}`,
@@ -671,10 +675,14 @@ function Ledger() {
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+
     if (!editProductName.trim() || !editPurchasePrice || !editSellingPrice) {
       showAlert("Please fill in the Product Name, Purchase Price, and Selling Price.", "Validation Error");
       return;
     }
+
+    setSubmitting(true);
 
     try {
       const payload = {
@@ -704,13 +712,18 @@ function Ledger() {
         body: JSON.stringify(payload)
       });
 
-      if (!res.ok) throw new Error("Failed to update entry");
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Failed to update entry");
+      }
 
       setEditingOrder(null);
       fetchOrders();
       fetchStockSummary();
     } catch (err) {
       showAlert(err.message, "Error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -813,6 +826,8 @@ function Ledger() {
 
   const handleAddRow = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+
     if (!productName.trim() || !purchasePrice || !sellingPrice) {
       showAlert("Please fill in the Product Name, Purchase Price, and Selling Price.", "Validation Error");
       return;
@@ -838,6 +853,8 @@ function Ledger() {
         return;
       }
     }
+
+    setSubmitting(true);
 
     try {
       const payload = {
@@ -871,6 +888,7 @@ function Ledger() {
       if (!res.ok) {
         const errData = await res.json();
         showAlert(`❌ ${errData.message || "Failed to add entry to accounts"}`, "Error");
+        setSubmitting(false);
         return;
       }
 
@@ -890,6 +908,8 @@ function Ledger() {
       fetchStockSummary();
     } catch (err) {
       showAlert(err.message, "Error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -1579,6 +1599,7 @@ function Ledger() {
             <button 
               type="submit" 
               className="btn btn-primary" 
+              disabled={submitting}
               style={{ 
                 width: "100%", 
                 height: "44px", 
@@ -1592,7 +1613,7 @@ function Ledger() {
                 background: "linear-gradient(135deg, var(--primary), var(--primary-hover))"
               }}
             >
-              <FaPlus /> Insert Row
+              <FaPlus /> {submitting ? "Inserting..." : "Insert Row"}
             </button>
           </div>
 
@@ -2072,7 +2093,7 @@ function Ledger() {
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setEditingOrder(null)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Changes</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? "Saving..." : "Save Changes"}</button>
               </div>
             </form>
           </div>
@@ -2349,9 +2370,9 @@ function Ledger() {
                   className="btn btn-primary" 
                   onClick={handleImportParsedOrders}
                   style={{ height: "40px", padding: "0 24px" }}
-                  disabled={parsedOrders.filter(item => !item.isDuplicate && item.productId).length === 0}
+                  disabled={pdfParsing || parsedOrders.filter(item => !item.isDuplicate && item.productId).length === 0}
                 >
-                  Import {parsedOrders.filter(item => !item.isDuplicate && item.productId).length} Orders
+                  {pdfParsing ? "Importing..." : `Import ${parsedOrders.filter(item => !item.isDuplicate && item.productId).length} Orders`}
                 </button>
               </div>
             </div>

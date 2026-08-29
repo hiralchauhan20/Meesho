@@ -11,6 +11,7 @@ function Investment() {
 
   // Search / Filter states
   const [searchText, setSearchText] = useState("");
+  const [stockSearchText, setStockSearchText] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
 
@@ -237,6 +238,12 @@ function Investment() {
   };
 
 
+  const filteredStocks = useMemo(() => {
+    return stocks.filter((item) =>
+      item.productName?.toLowerCase().includes(stockSearchText.toLowerCase())
+    );
+  }, [stocks, stockSearchText]);
+
   // Filter logic
   const filteredInvestments = useMemo(() => {
     return investments.filter((inv) => {
@@ -402,6 +409,24 @@ function Investment() {
             </div>
           </div>
 
+          {/* Stock Search Input */}
+          <div style={{ position: "relative", marginBottom: "16px", maxWidth: "400px" }}>
+            <FaSearch style={{ position: "absolute", left: "12px", top: "10px", color: "var(--text-muted)", fontSize: "13px" }} />
+            <input
+              type="text"
+              placeholder="Search live stock (e.g. Net Bra Cream 32)..."
+              value={stockSearchText}
+              onChange={(e) => setStockSearchText(e.target.value)}
+              style={{ width: "100%", paddingLeft: "34px", paddingRight: "30px", height: "34px", fontSize: "13px", borderRadius: "8px", border: "1px solid var(--border-color)", background: "var(--bg-secondary)", color: "var(--text-primary)" }}
+            />
+            {stockSearchText && (
+              <FaTimes 
+                onClick={() => setStockSearchText("")} 
+                style={{ position: "absolute", right: "12px", top: "10px", color: "var(--text-muted)", cursor: "pointer", fontSize: "13px" }} 
+              />
+            )}
+          </div>
+
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
               <thead>
@@ -415,7 +440,14 @@ function Investment() {
                 </tr>
               </thead>
               <tbody>
-                {stocks.map((item, idx) => {
+                {filteredStocks.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" style={{ padding: "30px 14px", textAlign: "center", color: "var(--text-secondary)", fontSize: "14px" }}>
+                      No matching stock items found.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredStocks.map((item, idx) => {
                   const totalPcs = Math.max(item.totalPurchasedPcs, 1);
                   const remPcs = Math.max(0, item.remainingPcs);
                   const pct = Math.min(100, Math.max(0, (remPcs / totalPcs) * 100));
@@ -522,7 +554,7 @@ function Investment() {
                       </td>
                     </tr>
                   );
-                })}
+                }))}
               </tbody>
             </table>
           </div>

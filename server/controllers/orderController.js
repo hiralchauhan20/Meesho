@@ -143,3 +143,71 @@ export const deleteOrder = async (req, res) => {
     });
   }
 };
+
+// Bulk Add Orders
+export const bulkAddOrders = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { orders } = req.body;
+
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return res.status(400).json({ message: "No orders provided for bulk import." });
+    }
+
+    const results = {
+      successCount: 0,
+      duplicatesCount: 0,
+      errorsCount: 0,
+      savedOrders: [],
+      errors: []
+    };
+
+    for (const orderData of orders) {
+      try {
+        const { orderNo, awbId } = orderData;
+
+        // Check duplicate orderNo for this user
+        if (orderNo && orderNo.trim()) {
+          const existingOrderNo = await Order.findOne({ userId, orderNo: orderNo.trim() });
+          if (existingOrderNo) {
+            results.duplicatesCount++;
+            results.errors.push(`Order ID "${orderNo.trim()}" already exists.`);
+            continue;
+          }
+        }
+
+        // Check duplicate awbId for this user
+        if (awbId && awbId.trim()) {
+          const existingAwbId = await Order.findOne({ userId, awbId: awbId.trim() });
+          if (existingAwbId) {
+            results.duplicatesCount++;
+            results.errors.push(`Tracking ID (AWB) "${awbId.trim()}" already exists.`);
+            continue;
+          }
+        }
+
+        const finalOrderData = { ...orderData, userId };
+        if (finalOrderData.paymentStatus && finalOrderData.paymentStatus !== "Pending") {
+          finalOrderData.statusChangedAt = new Date();
+          finalOrderData.dispatchStatus = "Dispatched";
+        }
+
+        const order = await Order.create(finalOrderData);
+        results.savedOrders.push(order);
+        results.successCount++;
+      } catch (err) {
+        results.errorsCount++;
+        results.errors.push(err.message);
+      }
+    }
+
+    res.status(201).json({
+      message: `Bulk import completed: ${results.successCount} saved, ${results.duplicatesCount} duplicates skipped.`,
+      results
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};

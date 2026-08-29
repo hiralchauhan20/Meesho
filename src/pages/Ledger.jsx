@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice, FaSearch, FaTimes, FaExclamationTriangle, FaCheckCircle, FaBoxes } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
 import { API_URL } from "../config";
@@ -92,6 +92,7 @@ function Ledger() {
   // Form states for fast entry
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // Default today
   const [orderNo, setOrderNo] = useState(""); // Order ID
+  const [productId, setProductId] = useState(""); // Selected Product ID
   const [productName, setProductName] = useState("");
   const [customerState, setCustomerState] = useState("Gujarat"); // India State
   const [purchasePrice, setPurchasePrice] = useState("");
@@ -105,6 +106,7 @@ function Ledger() {
   const [editingOrder, setEditingOrder] = useState(null);
   const [editDate, setEditDate] = useState("");
   const [editOrderNo, setEditOrderNo] = useState("");
+  const [editProductId, setEditProductId] = useState("");
   const [editProductName, setEditProductName] = useState("");
   const [editCustomerState, setEditCustomerState] = useState("Gujarat");
   const [editPurchasePrice, setEditPurchasePrice] = useState("");
@@ -131,10 +133,521 @@ function Ledger() {
     setAlertOpen(true);
   };
 
+  // PDF Parsing states
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState("");
+  const [parsedOrders, setParsedOrders] = useState([]);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [expandedRawText, setExpandedRawText] = useState(null);
+
+  // Helper matching functions for PDF Label Import
+  const autoMatchProduct = (text, productsList) => {
+    if (!productsList || productsList.length === 0) return null;
+    
+    const pageLower = text.toLowerCase();
+    let bestProduct = null;
+    let bestScore = 0;
+    
+    for (const p of productsList) {
+      const nameLower = p.productName.toLowerCase();
+      
+      // 1. Direct exact or normalized check first
+      const normName = nameLower.replace(/[^a-z0-9]/g, "");
+      const normPage = pageLower.replace(/[^a-z0-9]/g, "");
+      if (normPage.includes(normName)) {
+        return p;
+      }
+      
+      // 2. Token overlap score
+      const stopWords = ["of", "and", "or", "in", "with", "for", "the", "a", "an", "pack", "pk", "pcs", "pc"];
+      const tokens = nameLower
+        .split(/[^a-z0-9]+/)
+        .filter(t => t.length > 0 && !stopWords.includes(t));
+        
+      if (tokens.length === 0) continue;
+      
+      let matchedCount = 0;
+      for (const token of tokens) {
+        if (pageLower.includes(token)) {
+          matchedCount++;
+        }
+      }
+      
+      const score = matchedCount / tokens.length;
+      
+      // 3. Exact quantity mismatch checks (e.g. 3 vs 6)
+      const numbersInCatalog = nameLower.match(/\b\d+\b/g) || [];
+      let numberMismatch = false;
+      for (const num of numbersInCatalog) {
+        const pageNumbers = pageLower.match(/\b\d+\b/g) || [];
+        if (!pageNumbers.includes(num)) {
+          numberMismatch = true;
+          break;
+        }
+      }
+      
+      if (numberMismatch) {
+        continue;
+      }
+      
+      if (score > bestScore && score >= 0.5) {
+        bestScore = score;
+        bestProduct = p;
+      }
+    }
+    
+    return bestProduct;
+  };
+
+  const extractCourierPartner = (text) => {
+    const t = text.toLowerCase().replace(/\s+/g, "");
+    if (t.includes("delhivery")) return "Delhivery";
+    if (t.includes("shadowfax")) return "Shadowfax";
+    if (t.includes("xpressbees") || t.includes("expressbees")) return "Xpressbees";
+    if (t.includes("ecomexpress") || t.includes("ecom")) return "Ecom";
+    if (t.includes("valmo")) return "Valmo";
+    return "Valmo";
+  };
+
+  const extractCustomerState = (text, statesList) => {
+    const t = text.toLowerCase().replace(/[^a-z]/g, "");
+    
+    // Find all states mentioned in the text
+    const matchedStates = [];
+    for (const s of statesList) {
+      const stateLower = s.toLowerCase();
+      const normState = stateLower.replace(/[^a-z]/g, "");
+      if (t.includes(normState)) {
+        matchedStates.push(s);
+      }
+    }
+
+    // If there is any state other than Gujarat, that is the customer's state!
+    const nonGujarat = matchedStates.filter(s => s !== "Gujarat");
+    if (nonGujarat.length > 0) {
+      return nonGujarat[0];
+    }
+
+    // If only Gujarat is matched, or if no state is matched (fallback to Gujarat if no other state)
+    if (matchedStates.includes("Gujarat")) {
+      return "Gujarat";
+    }
+
+    const abbrevs = {
+      "gj": "Gujarat",
+      "mh": "Maharashtra",
+      "rj": "Rajasthan",
+      "up": "Uttar Pradesh",
+      "dl": "Delhi",
+      "mp": "Madhya Pradesh",
+      "ka": "Karnataka",
+      "tn": "Tamil Nadu",
+      "wb": "West Bengal",
+      "ap": "Andhra Pradesh",
+      "ts": "Telangana",
+      "hr": "Haryana",
+      "pb": "Punjab",
+      "br": "Bihar",
+      "jh": "Jharkhand",
+      "ct": "Chhattisgarh",
+      "or": "Odisha",
+      "kl": "Kerala",
+      "as": "Assam",
+      "jk": "Jammu & Kashmir",
+      "ut": "Uttarakhand",
+      "hp": "Himachal Pradesh",
+      "goa": "Goa"
+    };
+    
+    const stateCodeMatch = text.match(/state\s*(?:code)?\s*[:\-\s]*\b([a-zA-Z]{2})\b/i);
+    if (stateCodeMatch && stateCodeMatch[1]) {
+      const code = stateCodeMatch[1].toLowerCase();
+      if (abbrevs[code]) {
+        return abbrevs[code];
+      }
+    }
+    
+    return "Gujarat";
+  };
+
+  const extractOrderNo = (text) => {
+    const cleanText = text.replace(/\s+/g, "");
+
+    // Helper to ensure _1 is appended if missing
+    const ensureSuffix = (val) => {
+      if (!val) return "";
+      return val.includes("_") ? val : `${val}_1`;
+    };
+
+    // 1. Search for any 18-digit number with optional underscore suffix (typical Meesho format)
+    // We do this first because it is extremely specific and unique to Meesho orders, preventing
+    // collisions and greedy matching errors.
+    const match18 = cleanText.match(/(\d{18}(?:_\d+)?)/);
+    if (match18) return ensureSuffix(match18[1]);
+    
+    // 2. Try matching with keywords in normalized text (no spaces)
+    const patterns = [
+      /purchaseorderno\.?[:\s\-]*([0-9_\-\/]+)/i,
+      /orderno\.?[:\s\-]*([0-9_\-\/]+)/i,
+      /orderid[:\s\-]*([0-9_\-\/]+)/i,
+      /order[:\s\-]*([0-9_\-\/]+)/i
+    ];
+    for (const pattern of patterns) {
+      const match = cleanText.match(pattern);
+      if (match && match[1]) {
+        if (match[1].length >= 12) return ensureSuffix(match[1]);
+      }
+    }
+
+    // 3. Fallback to normal text checks
+    const patternsNormal = [
+      /purchase\s*order\s*no\.?\s*[:\s\-]*([0-9_\-\/]+)/i,
+      /order\s*no\.?\s*[:\s\-]*([0-9_\-\/]+)/i,
+      /order\s*id\s*[:\s\-]*([0-9_\-\/]+)/i,
+      /order\s*[:\s\-]*([0-9_\-\/]+)/i
+    ];
+    for (const pattern of patternsNormal) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        if (match[1].length >= 12) return ensureSuffix(match[1]);
+      }
+    }
+
+    // 4. Fallback: Find any 15-digit number starting with 3
+    const any15DigitOrder = cleanText.match(/(3[0-9]{14,17}(?:_[0-9]+)?)/);
+    if (any15DigitOrder) return ensureSuffix(any15DigitOrder[1]);
+
+    return "";
+  };
+
+  const extractAwbId = (text, orderNo) => {
+    // Split by newlines to match inside lines exclusively and avoid cross-line squishing (e.g. "Color" + Order ID)
+    const lines = text.split("\n").map(line => line.trim()).filter(Boolean);
+
+    // 1. Try matching with keywords in individual cleaned lines (no spaces inside the line)
+    const patterns = [
+      /awbno\.?[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
+      /awb[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
+      /trackingno\.?[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
+      /trackingid[:\s\-]*([a-zA-Z0-9_\-\/]+)/i
+    ];
+    for (const line of lines) {
+      const cleanLine = line.replace(/\s+/g, "");
+      for (const pattern of patterns) {
+        const match = cleanLine.match(pattern);
+        if (match && match[1] && match[1] !== orderNo && match[1].length >= 8) {
+          return match[1];
+        }
+      }
+    }
+
+    // 2. Fallback to normal text checks in individual lines
+    const patternsNormal = [
+      /awb\s*no\.?\s*[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
+      /awb\s*[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
+      /tracking\s*no\.?\s*[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
+      /tracking\s*id\s*[:\s\-]*([a-zA-Z0-9_\-\/]+)/i
+    ];
+    for (const line of lines) {
+      for (const pattern of patternsNormal) {
+        const match = line.match(pattern);
+        if (match && match[1] && match[1] !== orderNo && match[1].length >= 8) {
+          return match[1];
+        }
+      }
+    }
+
+    // 3. Specific carrier formats: Valmo/Shadowfax (alphabetic prefix + 10-15 digits) on a line
+    const valmoPattern = /(VL\d{10,15})/i;
+    const generalAlphaPattern = /([a-zA-Z]{1,4}\d{9,15}[a-zA-Z]{0,4})/;
+    const orderBase = orderNo.split("_")[0];
+
+    for (const line of lines) {
+      const cleanLine = line.replace(/\s+/g, "");
+      
+      const valmoMatch = cleanLine.match(valmoPattern);
+      if (valmoMatch && valmoMatch[1] && valmoMatch[1] !== orderNo && valmoMatch[1] !== orderBase) {
+        return valmoMatch[1].toUpperCase();
+      }
+
+      const generalAlphaMatch = cleanLine.match(generalAlphaPattern);
+      if (generalAlphaMatch && generalAlphaMatch[1] && generalAlphaMatch[1] !== orderNo && generalAlphaMatch[1] !== orderBase && !orderBase.includes(generalAlphaMatch[1])) {
+        return generalAlphaMatch[1];
+      }
+    }
+
+    // 4. Fallback: Find any 12-to-16 digit/char alphanumeric sequence on a single line (excluding orderNo and mobile numbers)
+    for (const line of lines) {
+      const cleanLine = line.replace(/\s+/g, "");
+      
+      // Match 12-to-16 digit numbers
+      const allNumbers = cleanLine.match(/\d{12,16}/g) || [];
+      for (const num of allNumbers) {
+        if (num !== orderNo && num !== orderBase && !orderBase.includes(num) && !/^[6-9]\d{9}/.test(num)) {
+          return num;
+        }
+      }
+      
+      // Match general alphanumeric AWB IDs (12 to 16 chars) requiring at least 8 digits to avoid address words
+      const alphaNums = cleanLine.match(/(?=.*\d{8,})[a-zA-Z0-9]{12,16}/g) || [];
+      for (const val of alphaNums) {
+        if (
+          val !== orderNo && 
+          val !== orderBase && 
+          !orderBase.includes(val) && 
+          !/^[6-9]\d{9}/.test(val) && 
+          !val.toLowerCase().includes("order") && 
+          !val.toLowerCase().includes("invoice")
+        ) {
+          return val;
+        }
+      }
+    }
+
+    return "";
+  };
+
+  const extractQuantity = (text) => {
+    const match = text.match(/qty\s*[:\s\-]*([0-9]+)/i) || text.match(/quantity\s*[:\s\-]*([0-9]+)/i);
+    if (match && match[1]) {
+      const qty = parseInt(match[1], 10);
+      if (!isNaN(qty) && qty > 0) {
+        return qty;
+      }
+    }
+    return 1;
+  };
+
+  const extractOrderDate = (text) => {
+    // Normalize spaces/newlines around dots/dashes
+    const normalized = text.replace(/\s*([\.\-\/])\s*/g, "$1");
+    
+    // 1. Look for "order date" and grab nearest date pattern (e.g. DD.MM.YYYY)
+    const lowerText = normalized.toLowerCase();
+    const dateIndex = lowerText.indexOf("order date");
+    if (dateIndex !== -1) {
+      const subText = normalized.slice(dateIndex, dateIndex + 120);
+      const dateMatch = subText.match(/\b(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})\b/);
+      if (dateMatch) {
+        const [_, day, month, year] = dateMatch;
+        const paddedDay = day.padStart(2, "0");
+        const paddedMonth = month.padStart(2, "0");
+        return `${year}-${paddedMonth}-${paddedDay}`;
+      }
+    }
+
+    // 2. Fallback to any date pattern on the page
+    const dateMatch = normalized.match(/\b(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})\b/);
+    if (dateMatch) {
+      const [_, day, month, year] = dateMatch;
+      const paddedDay = day.padStart(2, "0");
+      const paddedMonth = month.padStart(2, "0");
+      return `${year}-${paddedMonth}-${paddedDay}`;
+    }
+
+    // Default to today's date if no date found
+    return new Date().toISOString().slice(0, 10);
+  };
+
+  const handlePdfUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setPdfParsing(true);
+    setPdfProgress("Loading PDF.js extraction library...");
+
+    try {
+      const pdfjsLib = await new Promise((resolve, reject) => {
+        if (window.pdfjsLib) {
+          resolve(window.pdfjsLib);
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+        script.onload = () => {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+          resolve(window.pdfjsLib);
+        };
+        script.onerror = (err) => reject(new Error("Failed to load PDF extraction library. Check your internet connection."));
+        document.head.appendChild(script);
+      });
+
+      setPdfProgress("Reading PDF file...");
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const totalPages = pdf.numPages;
+      const parsedRows = [];
+
+      for (let i = 1; i <= totalPages; i++) {
+        setPdfProgress(`Extracting page ${i} of ${totalPages}...`);
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const textItems = textContent.items.map(item => item.str);
+        const pageText = textItems.join("\n");
+
+        if (!pageText.trim()) continue;
+
+        const orderNoMatch = extractOrderNo(pageText);
+        const awbIdMatch = extractAwbId(pageText, orderNoMatch);
+        const courier = extractCourierPartner(pageText);
+        const state = extractCustomerState(pageText, INDIA_STATES);
+        const qty = extractQuantity(pageText);
+        const dateMatch = extractOrderDate(pageText);
+
+        const matchedP = autoMatchProduct(pageText, products);
+        
+        const isDuplicateOrder = orderNoMatch && orders.some(o => o.orderNo && o.orderNo.trim() === orderNoMatch.trim());
+        const isDuplicateAwb = awbIdMatch && orders.some(o => o.awbId && o.awbId.trim() === awbIdMatch.trim());
+
+        parsedRows.push({
+          tempId: `parsed-${i}-${Date.now()}`,
+          pageNum: i,
+          date: dateMatch,
+          orderNo: orderNoMatch,
+          awbId: awbIdMatch,
+          courierPartner: courier,
+          customerState: state,
+          quantity: String(qty),
+          gst: matchedP ? String(matchedP.gst) : "18",
+          productId: matchedP ? matchedP._id : "",
+          productName: matchedP ? matchedP.productName : "",
+          purchasePrice: matchedP ? String(matchedP.purchasePrice) : "",
+          sellingPrice: matchedP ? String(matchedP.sellingPrice) : "",
+          pageText: pageText,
+          isDuplicate: isDuplicateOrder || isDuplicateAwb,
+          duplicateReason: isDuplicateOrder && isDuplicateAwb 
+            ? "Duplicate Order ID & Tracking ID" 
+            : isDuplicateOrder 
+              ? "Duplicate Order ID" 
+              : isDuplicateAwb 
+                ? "Duplicate Tracking ID (AWB)" 
+                : ""
+        });
+      }
+
+      if (parsedRows.length === 0) {
+        throw new Error("Could not find any readable text/shipping labels in this PDF. Please ensure this is a standard digital Meesho shipping label PDF.");
+      }
+
+      setParsedOrders(parsedRows);
+      setPreviewModalOpen(true);
+    } catch (err) {
+      showAlert(err.message, "Parsing Error");
+    } finally {
+      setPdfParsing(false);
+      setPdfProgress("");
+      e.target.value = "";
+    }
+  };
+
+  const handleParsedProductChange = (tempId, pId) => {
+    const matchedP = products.find(p => p._id === pId);
+    setParsedOrders(prev => prev.map(item => {
+      if (item.tempId === tempId) {
+        return {
+          ...item,
+          productId: pId,
+          productName: matchedP ? matchedP.productName : "",
+          purchasePrice: matchedP ? String(matchedP.purchasePrice) : "",
+          sellingPrice: matchedP ? String(matchedP.sellingPrice) : "",
+          gst: matchedP ? String(matchedP.gst) : "18"
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleParsedFieldChange = (tempId, field, value) => {
+    setParsedOrders(prev => prev.map(item => {
+      if (item.tempId === tempId) {
+        const updated = { ...item, [field]: value };
+        if (field === "orderNo" || field === "awbId") {
+          const checkOrderNo = field === "orderNo" ? value : item.orderNo;
+          const checkAwbId = field === "awbId" ? value : item.awbId;
+          const isDuplicateOrder = checkOrderNo && orders.some(o => o.orderNo && o.orderNo.trim() === checkOrderNo.trim());
+          const isDuplicateAwb = checkAwbId && orders.some(o => o.awbId && o.awbId.trim() === checkAwbId.trim());
+          updated.isDuplicate = isDuplicateOrder || isDuplicateAwb;
+          updated.duplicateReason = isDuplicateOrder && isDuplicateAwb 
+            ? "Duplicate Order ID & Tracking ID" 
+            : isDuplicateOrder 
+              ? "Duplicate Order ID" 
+              : isDuplicateAwb 
+                ? "Duplicate Tracking ID (AWB)" 
+                : "";
+        }
+        return updated;
+      }
+      return item;
+    }));
+  };
+
+  const handleRemoveParsedRow = (tempId) => {
+    setParsedOrders(prev => prev.filter(item => item.tempId !== tempId));
+  };
+
+  const handleImportParsedOrders = async () => {
+    const validOrders = parsedOrders.filter(item => !item.isDuplicate && item.productId);
+    if (validOrders.length === 0) {
+      showAlert("No valid, non-duplicate orders with products selected to import.", "Import Info");
+      return;
+    }
+
+    setPdfParsing(true);
+    setPdfProgress(`Saving ${validOrders.length} orders...`);
+
+    try {
+      const payload = {
+        orders: validOrders.map(item => ({
+          date: item.date,
+          orderNo: item.orderNo.trim(),
+          awbId: item.awbId.trim(),
+          courierPartner: item.courierPartner,
+          customerState: item.customerState,
+          productId: item.productId,
+          productName: item.productName,
+          purchasePrice: Number(item.purchasePrice),
+          sellingPrice: Number(item.sellingPrice),
+          quantity: Number(item.quantity),
+          gst: Number(item.gst),
+          paymentStatus: "Pending",
+          dispatchStatus: "Dispatched",
+          claimStatus: "No Claim",
+          claimAmount: 0
+        }))
+      };
+
+      const res = await fetch(`${API_URL}/api/orders/bulk-add`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Failed to bulk import orders");
+      }
+
+      const resData = await res.json();
+      setPreviewModalOpen(false);
+      setParsedOrders([]);
+      fetchOrders();
+      showAlert(resData.message, "Import Successful");
+    } catch (err) {
+      showAlert(err.message, "Import Error");
+    } finally {
+      setPdfParsing(false);
+      setPdfProgress("");
+    }
+  };
+
   const startEdit = (o) => {
     setEditingOrder(o);
     setEditDate(new Date(o.date || o.createdAt).toISOString().slice(0, 10));
     setEditOrderNo(o.orderNo || "");
+    setEditProductId(o.productId?._id || o.productId || "");
     setEditProductName(o.productName || o.productId?.productName || "");
     setEditCustomerState(o.customerState || "Gujarat");
     setEditPurchasePrice(o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || ""));
@@ -161,6 +674,7 @@ function Ledger() {
         orderNo: editOrderNo.trim(),
         awbId: editAwbId.trim(),
         customerState: editCustomerState,
+        productId: editProductId || undefined,
         productName: editProductName.trim(),
         purchasePrice: Number(editPurchasePrice),
         sellingPrice: Number(editSellingPrice),
@@ -193,33 +707,34 @@ function Ledger() {
     }
   };
 
-  const handleProductNameChange = (value) => {
+  const handleProductSelect = (value) => {
     setProductName(value);
 
-    // Check if there is an exact match in the custom products list
-    const matchedProduct = products.find(p => p.productName.toLowerCase() === value.trim().toLowerCase());
+    const matchedProduct = products.find(p => p.productName === value);
     if (matchedProduct) {
+      setProductId(matchedProduct._id);
       setPurchasePrice(String(matchedProduct.purchasePrice));
       setSellingPrice(String(matchedProduct.sellingPrice));
       setGst(String(matchedProduct.gst || 18));
-      return;
+    } else {
+      setProductId("");
+      setPurchasePrice("");
+      setSellingPrice("");
+      setGst("18");
     }
+  };
 
-    const lower = value.toLowerCase();
-    
-    // Autofill Buying Price based on matching rules
-    if ((lower.includes("shapewear") || lower.includes("shapware") || lower.includes("shapare")) && (lower.includes("pack of 2") || lower.includes("2 pack") || lower.includes("pack 2"))) {
-      setPurchasePrice("170");
-    } else if (lower.includes("shapewear") || lower.includes("shapware") || lower.includes("shapare")) {
-      setPurchasePrice("86");
-    } else if (lower.includes("air bra") && (lower.includes("pack of 3") || lower.includes("3 pack") || lower.includes("pack 3"))) {
-      setPurchasePrice("87");
-    } else if (lower.includes("air bra") && (lower.includes("pack of 6") || lower.includes("6 pack") || lower.includes("pack 6"))) {
-      setPurchasePrice("168");
-    } else if ((lower.includes("magical bra") || lower.includes("megical bra")) && (lower.includes("pack of 3") || lower.includes("3 pack") || lower.includes("pack 3"))) {
-      setPurchasePrice("75");
-    } else if ((lower.includes("magical bra") || lower.includes("megical bra")) && (lower.includes("pack of 6") || lower.includes("6 pack") || lower.includes("pack 6"))) {
-      setPurchasePrice("144");
+  const handleEditProductSelect = (value) => {
+    setEditProductName(value);
+
+    const matchedProduct = products.find(p => p.productName === value);
+    if (matchedProduct) {
+      setEditProductId(matchedProduct._id);
+      setEditPurchasePrice(String(matchedProduct.purchasePrice));
+      setEditSellingPrice(String(matchedProduct.sellingPrice));
+      setEditGst(String(matchedProduct.gst || 18));
+    } else {
+      setEditProductId("");
     }
   };
 
@@ -321,6 +836,7 @@ function Ledger() {
         orderNo: trimmedOrderNo,
         awbId: trimmedAwbId,
         customerState,
+        productId: productId || undefined,
         productName: productName.trim(),
         purchasePrice: Number(purchasePrice),
         sellingPrice: Number(sellingPrice),
@@ -353,6 +869,7 @@ function Ledger() {
       // Reset entry form except product name if they want to log different pricing or dates
       setOrderNo("");
       setAwbId("");
+      setProductId("");
       setProductName("");
       setPurchasePrice("");
       setSellingPrice("");
@@ -453,6 +970,7 @@ function Ledger() {
     let totalPurchase = 0;
     let totalSales = 0;
     let totalProfit = 0;
+    let totalReturnCost = 0;
 
     orders.forEach((o) => {
       const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
@@ -461,6 +979,7 @@ function Ledger() {
       
       const profit = calculateOrderProfit(o);
       const payStatus = o.paymentStatus || "Pending";
+      const claimAmt = o.claimAmount || 0;
       
       totalQty += qtyVal;
       totalProfit += profit;
@@ -470,9 +989,15 @@ function Ledger() {
         totalPurchase += purchaseVal * qtyVal;
         totalSales += sellingVal * qtyVal;
       }
+
+      if (payStatus === "Return") {
+        totalReturnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
+      } else if (payStatus === "Wrong Return") {
+        totalReturnCost += (o.claimStatus === "Approved" ? -claimAmt : 0);
+      }
     });
 
-    return { totalQty, totalPurchase, totalSales, totalProfit };
+    return { totalQty, totalPurchase, totalSales, totalProfit, totalReturnCost };
   };
 
   const stats = getLedgerStats();
@@ -513,12 +1038,33 @@ function Ledger() {
 
   // Stats for filtered results
   const filteredStats = useMemo(() => {
-    let totalQty = 0, totalProfit = 0;
+    let totalQty = 0;
+    let totalProfit = 0;
+    let totalSales = 0;
+    let totalReturnCost = 0;
+
     filteredOrders.forEach((o) => {
-      totalQty += o.quantity || 1;
-      totalProfit += calculateOrderProfit(o);
+      const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
+      const qtyVal = o.quantity || 1;
+      const profit = calculateOrderProfit(o);
+      const payStatus = o.paymentStatus || "Pending";
+      const claimAmt = o.claimAmount || 0;
+
+      totalQty += qtyVal;
+      totalProfit += profit;
+
+      if (payStatus === "Complete") {
+        totalSales += sellingVal * qtyVal;
+      }
+
+      if (payStatus === "Return") {
+        totalReturnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
+      } else if (payStatus === "Wrong Return") {
+        totalReturnCost += (o.claimStatus === "Approved" ? -claimAmt : 0);
+      }
     });
-    return { totalQty, totalProfit };
+
+    return { totalQty, totalProfit, totalSales, totalReturnCost };
   }, [filteredOrders]);
 
   const claimStats = useMemo(() => {
@@ -620,9 +1166,15 @@ function Ledger() {
               style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
             >
               <option value="">All Products</option>
-              {FILTER_PRODUCTS.map((p) => (
-                <option key={p} value={p}>{p}</option>
+              {products.map((p) => (
+                <option key={p._id} value={p.productName}>{p.productName}</option>
               ))}
+              {Array.from(new Set(orders.map(o => o.productName || o.productId?.productName || "")))
+                .filter(name => name && !products.some(p => p.productName === name))
+                .map(name => (
+                  <option key={name} value={name}>{name} (Legacy)</option>
+                ))
+              }
             </select>
           </div>
 
@@ -750,6 +1302,8 @@ function Ledger() {
                 <span style={{ color: "var(--text-muted)", fontSize: "11px", fontWeight: "700", textTransform: "uppercase" }}>Filtered</span>
                 <span>Orders: <strong style={{ color: "var(--primary)" }}>{filteredOrders.length}</strong></span>
                 <span>Qty: <strong style={{ color: "#f59e0b" }}>{filteredStats.totalQty}</strong></span>
+                <span>Sales: <strong style={{ color: "#10b981" }}>₹{filteredStats.totalSales.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong></span>
+                <span>Return Cost: <strong style={{ color: "#ef4444" }}>₹{filteredStats.totalReturnCost.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong></span>
                 <span>Profit: <strong style={{ color: filteredStats.totalProfit >= 0 ? "var(--success)" : "var(--danger)" }}>₹{filteredStats.totalProfit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
               </>
             ) : (
@@ -757,9 +1311,55 @@ function Ledger() {
                 <span style={{ color: "var(--text-muted)", fontSize: "11px", fontWeight: "700", textTransform: "uppercase" }}>Total</span>
                 <span>Orders: <strong style={{ color: "var(--primary)" }}>{orders.length}</strong></span>
                 <span>Qty: <strong style={{ color: "#f59e0b" }}>{stats.totalQty}</strong></span>
+                <span>Sales: <strong style={{ color: "#10b981" }}>₹{stats.totalSales.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong></span>
+                <span>Return Cost: <strong style={{ color: "#ef4444" }}>₹{stats.totalReturnCost.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong></span>
                 <span>Profit: <strong style={{ color: stats.totalProfit >= 0 ? "var(--success)" : "var(--danger)" }}>₹{stats.totalProfit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
               </>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bulk Import Meesho Labels PDF */}
+      <div 
+        style={{
+          background: "var(--glass-bg)",
+          border: "2px dashed var(--primary)",
+          borderRadius: "12px",
+          padding: "24px",
+          marginBottom: "20px",
+          boxShadow: "var(--glass-shadow)",
+          textAlign: "center",
+          position: "relative",
+          cursor: "pointer",
+          transition: "all 0.3s ease"
+        }}
+      >
+        <input 
+          type="file" 
+          accept=".pdf" 
+          onChange={handlePdfUpload}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            opacity: 0,
+            width: "100%",
+            cursor: "pointer"
+          }}
+          disabled={pdfParsing}
+        />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+          <FaFileInvoice style={{ fontSize: "36px", color: "var(--primary)" }} />
+          <div>
+            <h4 style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
+              {pdfParsing ? pdfProgress : "Bulk Import Meesho Labels PDF"}
+            </h4>
+            <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "4px" }}>
+              {pdfParsing ? "Processing labels... please wait." : "Drag & drop or click to upload your Meesho shipping labels PDF"}
+            </p>
           </div>
         </div>
       </div>
@@ -799,7 +1399,7 @@ function Ledger() {
               type="text" 
               placeholder="e.g. 30880548..." 
               value={orderNo} 
-              onChange={(e) => setOrderNo(e.target.value.replace(/[a-zA-Z]/g, ""))} 
+              onChange={(e) => setOrderNo(e.target.value)} 
               style={{ 
                 width: "100%", 
                 borderColor: orderNo.trim() && orders.some(o => o.orderNo && o.orderNo.trim().toLowerCase() === orderNo.trim().toLowerCase()) ? "var(--danger)" : undefined 
@@ -847,33 +1447,30 @@ function Ledger() {
                 </span>
               )}
             </div>
-            <input 
-              type="text" 
-              placeholder="e.g. Air Bra (Pack of 3)" 
-              value={productName} 
-              onChange={(e) => handleProductNameChange(e.target.value)} 
-              list="product-suggestions"
-              required 
-              style={{ width: "100%" }} 
-            />
-             <datalist id="product-suggestions">
+            <select
+              value={productName}
+              onChange={(e) => handleProductSelect(e.target.value)}
+              required
+              style={{ width: "100%" }}
+            >
+              <option value="">Select Product...</option>
               {products.map((p) => (
-                <option key={p._id} value={p.productName} />
+                <option key={p._id} value={p.productName}>{p.productName}</option>
               ))}
               {products.length === 0 && (
                 <>
-                  <option value="Air Bra (Pack of 3)" />
-                  <option value="Air Bra (Pack of 6)" />
-                  <option value="Megical Bra (Pack of 3)" />
-                  <option value="Megical Bra (Pack of 6)" />
-                  <option value="Shapewear Black" />
-                  <option value="Shapewear Black (Pack of 2)" />
-                  <option value="Shapewear Cream" />
-                  <option value="Shapewear Cream (Pack of 2)" />
-                  <option value="Shapewear Black and Cream (Pack of 2)" />
+                  <option value="Air Bra (Pack of 3)">Air Bra (Pack of 3)</option>
+                  <option value="Air Bra (Pack of 6)">Air Bra (Pack of 6)</option>
+                  <option value="Megical Bra (Pack of 3)">Megical Bra (Pack of 3)</option>
+                  <option value="Megical Bra (Pack of 6)">Megical Bra (Pack of 6)</option>
+                  <option value="Shapewear Black">Shapewear Black</option>
+                  <option value="Shapewear Black (Pack of 2)">Shapewear Black (Pack of 2)</option>
+                  <option value="Shapewear Cream">Shapewear Cream</option>
+                  <option value="Shapewear Cream (Pack of 2)">Shapewear Cream (Pack of 2)</option>
+                  <option value="Shapewear Black and Cream (Pack of 2)">Shapewear Black and Cream (Pack of 2)</option>
                 </>
               )}
-            </datalist>
+            </select>
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Buying Price (₹)</label>
@@ -1237,7 +1834,7 @@ function Ledger() {
                 </div>
                 <div>
                   <label>Order No. / ID</label>
-                  <input type="text" value={editOrderNo} onChange={(e) => setEditOrderNo(e.target.value.replace(/[a-zA-Z]/g, ""))} />
+                  <input type="text" value={editOrderNo} onChange={(e) => setEditOrderNo(e.target.value)} />
                 </div>
                 <div>
                   <label>Customer State</label>
@@ -1259,19 +1856,19 @@ function Ledger() {
                 </div>
                 <div className="form-full">
                   <label>Product Name</label>
-                  <input 
-                    type="text" 
+                  <select 
                     value={editProductName} 
-                    onChange={(e) => setEditProductName(e.target.value)} 
-                    list="edit-product-suggestions"
+                    onChange={(e) => handleEditProductSelect(e.target.value)} 
                     required 
-                  />
-                  <datalist id="edit-product-suggestions">
-                    <option value="Air Bra (Pack of 3)" />
-                    <option value="Air Bra (Pack of 6)" />
-                    <option value="Magical Bra (Pack of 3)" />
-                    <option value="Magical Bra (Pack of 6)" />
-                  </datalist>
+                  >
+                    <option value="">Select Product...</option>
+                    {products.map((p) => (
+                      <option key={p._id} value={p.productName}>{p.productName}</option>
+                    ))}
+                    {editProductName && !products.some(p => p.productName === editProductName) && (
+                      <option value={editProductName}>{editProductName} (Legacy)</option>
+                    )}
+                  </select>
                 </div>
                 <div>
                   <label>Buying Price (₹)</label>
@@ -1345,6 +1942,286 @@ function Ledger() {
                 <button type="submit" className="btn btn-primary">Save Changes</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Parsed Orders Preview Modal */}
+      {previewModalOpen && (
+        <div style={{
+          position: "fixed",
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(15, 23, 42, 0.8)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 1000,
+          padding: "20px"
+        }}>
+          <div style={{
+            width: "100%",
+            maxWidth: "1100px",
+            maxHeight: "90vh",
+            background: "var(--bg-secondary)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "12px",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "var(--glass-shadow)",
+            overflow: "hidden"
+          }}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px", borderBottom: "1px solid var(--border-color)" }}>
+              <div>
+                <h3 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <FaFileInvoice /> Review Extracted Orders ({parsedOrders.length})
+                </h3>
+                <p style={{ color: "var(--text-secondary)", fontSize: "12px", marginTop: "4px" }}>
+                  We scanned the PDF labels and filled the fields. Please check product matches and select correct products where unmatched.
+                </p>
+              </div>
+              <button 
+                onClick={() => { setPreviewModalOpen(false); setParsedOrders([]); }}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px" }}
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div style={{ padding: "20px", overflowY: "auto", flex: 1 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border-color)", textTransform: "uppercase", fontSize: "11px", color: "var(--text-secondary)" }}>
+                    <th style={{ padding: "10px 8px", textAlign: "center", width: "40px" }}>Page</th>
+                    <th style={{ padding: "10px 8px", textAlign: "left", width: "140px" }}>Order ID</th>
+                    <th style={{ padding: "10px 8px", textAlign: "left", width: "130px" }}>AWB ID</th>
+                    <th style={{ padding: "10px 8px", textAlign: "left", width: "110px" }}>Courier</th>
+                    <th style={{ padding: "10px 8px", textAlign: "left", width: "130px" }}>State</th>
+                    <th style={{ padding: "10px 8px", textAlign: "left" }}>Product Match (Select correct product)</th>
+                    <th style={{ padding: "10px 8px", textAlign: "center", width: "60px" }}>Qty</th>
+                    <th style={{ padding: "10px 8px", textAlign: "center", width: "70px" }}>Status</th>
+                    <th style={{ padding: "10px 8px", textAlign: "center", width: "50px" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsedOrders.map((item) => (
+                    <Fragment key={item.tempId}>
+                      <tr 
+                        style={{ 
+                          borderBottom: "1px solid var(--border-color)",
+                          background: item.isDuplicate ? "rgba(239, 68, 68, 0.05)" : "transparent"
+                        }}
+                      >
+                        <td style={{ padding: "10px 8px", textAlign: "center", color: "var(--text-muted)" }}>{item.pageNum}</td>
+                      <td style={{ padding: "6px 8px" }}>
+                        <input 
+                          type="text" 
+                          value={item.orderNo} 
+                          onChange={(e) => handleParsedFieldChange(item.tempId, "orderNo", e.target.value)} 
+                          style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                        />
+                      </td>
+                      <td style={{ padding: "6px 8px" }}>
+                        <input 
+                          type="text" 
+                          value={item.awbId} 
+                          onChange={(e) => handleParsedFieldChange(item.tempId, "awbId", e.target.value)} 
+                          style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                        />
+                      </td>
+                      <td style={{ padding: "6px 8px" }}>
+                        <select 
+                          value={item.courierPartner} 
+                          onChange={(e) => handleParsedFieldChange(item.tempId, "courierPartner", e.target.value)}
+                          style={{ height: "30px", fontSize: "13px", padding: "0 4px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                        >
+                          <option value="Valmo">Valmo</option>
+                          <option value="Xpressbees">Xpressbees</option>
+                          <option value="Shadowfax">Shadowfax</option>
+                          <option value="Delhivery">Delhivery</option>
+                          <option value="Ecom">Ecom</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: "6px 8px" }}>
+                        <select 
+                          value={item.customerState} 
+                          onChange={(e) => handleParsedFieldChange(item.tempId, "customerState", e.target.value)}
+                          style={{ height: "30px", fontSize: "13px", padding: "0 4px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                        >
+                          {INDIA_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "6px 8px" }}>
+                        <select 
+                          value={item.productId} 
+                          onChange={(e) => handleParsedProductChange(item.tempId, e.target.value)}
+                          style={{ 
+                            height: "30px", 
+                            fontSize: "13px", 
+                            padding: "0 4px", 
+                            width: "100%",
+                            background: !item.productId ? "rgba(245, 158, 11, 0.05)" : "var(--bg-primary)",
+                            borderColor: !item.productId ? "var(--warning)" : "var(--border-color)",
+                            borderWidth: "1px",
+                            borderStyle: "solid",
+                            borderRadius: "4px",
+                            color: "var(--text-primary)"
+                          }}
+                        >
+                          <option value="">-- UNMATCHED (Please Select) --</option>
+                          {products.map(p => (
+                            <option key={p._id} value={p._id}>{p.productName} (Buy: ₹{p.purchasePrice} | Sell: ₹{p.sellingPrice})</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ padding: "6px 8px" }}>
+                        <input 
+                          type="number" 
+                          min="1"
+                          value={item.quantity} 
+                          onChange={(e) => handleParsedFieldChange(item.tempId, "quantity", e.target.value)} 
+                          style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", textAlign: "center", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                        />
+                      </td>
+                      <td style={{ padding: "10px 8px", textAlign: "center" }}>
+                        {item.isDuplicate ? (
+                          <span 
+                            title={item.duplicateReason}
+                            style={{ 
+                              background: "rgba(239, 68, 68, 0.15)", 
+                              color: "var(--danger)", 
+                              padding: "2px 6px", 
+                              borderRadius: "4px", 
+                              fontSize: "10px", 
+                              fontWeight: "bold",
+                              display: "inline-block",
+                              maxWidth: "80px",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            Duplicate
+                          </span>
+                        ) : !item.productId ? (
+                          <span 
+                            style={{ 
+                              background: "rgba(245, 158, 11, 0.15)", 
+                              color: "#b45309", 
+                              padding: "2px 6px", 
+                              borderRadius: "4px", 
+                              fontSize: "10px", 
+                              fontWeight: "bold",
+                              display: "inline-block"
+                            }}
+                          >
+                            No Product
+                          </span>
+                        ) : (
+                          <span 
+                            style={{ 
+                              background: "rgba(34, 197, 94, 0.15)", 
+                              color: "var(--success)", 
+                              padding: "2px 6px", 
+                              borderRadius: "4px", 
+                              fontSize: "10px", 
+                              fontWeight: "bold",
+                              display: "inline-block"
+                            }}
+                          >
+                            Ready
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 8px", textAlign: "center" }}>
+                        <div style={{ display: "inline-flex", gap: "8px" }}>
+                          <button 
+                            type="button"
+                            onClick={() => setExpandedRawText(expandedRawText === item.tempId ? null : item.tempId)}
+                            style={{ 
+                              background: "none", 
+                              border: "none", 
+                              color: expandedRawText === item.tempId ? "var(--primary)" : "var(--text-muted)", 
+                              cursor: "pointer", 
+                              padding: "4px" 
+                            }}
+                            title="View Extracted Text"
+                          >
+                            <FaSearch size={12} />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleRemoveParsedRow(item.tempId)}
+                            style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", padding: "4px" }}
+                            title="Remove label page"
+                          >
+                            <FaTrash size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {expandedRawText === item.tempId && (
+                      <tr style={{ background: "rgba(255, 255, 255, 0.02)" }}>
+                        <td colSpan="9" style={{ padding: "12px 20px" }}>
+                          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "6px", fontWeight: "bold" }}>
+                            RAW TEXT EXTRACTED FROM PAGE {item.pageNum}:
+                          </div>
+                          <pre style={{
+                            whiteSpace: "pre-wrap",
+                            background: "var(--bg-primary)",
+                            padding: "10px",
+                            borderRadius: "6px",
+                            fontSize: "11px",
+                            color: "var(--text-secondary)",
+                            maxHeight: "150px",
+                            overflowY: "auto",
+                            border: "1px solid var(--border-color)",
+                            fontFamily: "monospace",
+                            textAlign: "left"
+                          }}>{item.pageText}</pre>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px", borderTop: "1px solid var(--border-color)", background: "rgba(0,0,0,0.1)" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                <span>Valid orders to import: </span>
+                <strong style={{ color: "var(--success)", fontSize: "14px" }}>
+                  {parsedOrders.filter(item => !item.isDuplicate && item.productId).length}
+                </strong>
+                <span> / {parsedOrders.length} total. (Duplicate and unmatched rows will be skipped).</span>
+              </div>
+              <div style={{ display: "flex", gap: "12px" }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => { setPreviewModalOpen(false); setParsedOrders([]); }}
+                  style={{ height: "40px" }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  onClick={handleImportParsedOrders}
+                  style={{ height: "40px", padding: "0 24px" }}
+                  disabled={parsedOrders.filter(item => !item.isDuplicate && item.productId).length === 0}
+                >
+                  Import {parsedOrders.filter(item => !item.isDuplicate && item.productId).length} Orders
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

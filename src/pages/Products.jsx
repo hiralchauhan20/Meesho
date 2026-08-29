@@ -10,24 +10,19 @@ function Products() {
 
   // Form states for adding product
   const [productName, setProductName] = useState("");
-  const [category, setCategory] = useState("Apparel");
   const [purchasePrice, setPurchasePrice] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
-  const [gst, setGst] = useState("18");
-  const [quantity, setQuantity] = useState("0");
+  const [gst, setGst] = useState("0");
 
   // Edit states
   const [editingProduct, setEditingProduct] = useState(null);
   const [editProductName, setEditProductName] = useState("");
-  const [editCategory, setEditCategory] = useState("");
   const [editPurchasePrice, setEditPurchasePrice] = useState("");
   const [editSellingPrice, setEditSellingPrice] = useState("");
-  const [editGst, setEditGst] = useState("18");
-  const [editQuantity, setEditQuantity] = useState("0");
+  const [editGst, setEditGst] = useState("0");
 
   // Search/Filter states
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
 
   // Modal states
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -74,11 +69,11 @@ function Products() {
     try {
       const payload = {
         productName: productName.trim(),
-        category: category,
+        category: "Other",
         purchasePrice: Number(purchasePrice),
         sellingPrice: Number(sellingPrice),
         gst: Number(gst),
-        quantity: Number(quantity) || 0,
+        quantity: 0,
       };
 
       const res = await fetch(`${API_URL}/api/products/add`, {
@@ -99,8 +94,7 @@ function Products() {
       setProductName("");
       setPurchasePrice("");
       setSellingPrice("");
-      setGst("18");
-      setQuantity("0");
+      setGst("0");
 
       fetchProducts();
       showAlert("Product added successfully!", "Success");
@@ -112,11 +106,9 @@ function Products() {
   const startEdit = (p) => {
     setEditingProduct(p);
     setEditProductName(p.productName);
-    setEditCategory(p.category || "Apparel");
     setEditPurchasePrice(String(p.purchasePrice));
-    setEditSellingPrice(String(p.sellingPrice));
+    setEditSellingPrice(String(p.sellingPrice || ""));
     setEditGst(String(p.gst || 0));
-    setEditQuantity(String(p.quantity || 0));
   };
 
   const handleEditSubmit = async (e) => {
@@ -129,11 +121,11 @@ function Products() {
     try {
       const payload = {
         productName: editProductName.trim(),
-        category: editCategory,
+        category: editingProduct.category || "Other",
         purchasePrice: Number(editPurchasePrice),
         sellingPrice: Number(editSellingPrice),
         gst: Number(editGst),
-        quantity: Number(editQuantity) || 0,
+        quantity: editingProduct.quantity || 0,
       };
 
       const res = await fetch(`${API_URL}/api/products/${editingProduct._id}`, {
@@ -182,20 +174,28 @@ function Products() {
     }
   };
 
-  // Unique categories for filtering
-  const categories = ["Apparel", "Home Decor", "Electronics", "Beauty & Care", "Footwear", "Other"];
-
   const filteredProducts = products.filter((p) => {
-    const matchesSearch = p.productName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = filterCategory ? p.category === filterCategory : true;
-    return matchesSearch && matchesCategory;
+    return p.productName.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   return (
     <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 10px" }}>
       <div className="page-header" style={{ marginBottom: "24px" }}>
         <div className="page-title-group">
-          <h2 style={{ fontSize: "24px", fontWeight: "700", color: "var(--text-primary)" }}>Products</h2>
+          <h2 style={{ fontSize: "24px", fontWeight: "700", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "10px" }}>
+            Products
+            <span style={{ 
+              fontSize: "13px", 
+              fontWeight: "600", 
+              background: "rgba(255, 255, 255, 0.05)", 
+              color: "var(--primary)", 
+              border: "1px solid var(--border-color)", 
+              padding: "2px 10px", 
+              borderRadius: "20px" 
+            }}>
+              {searchTerm ? `${filteredProducts.length} of ${products.length}` : `${products.length} Total`}
+            </span>
+          </h2>
           <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "4px" }}>
             Add, update, and manage your product catalog with purchase and selling prices
           </p>
@@ -240,60 +240,38 @@ function Products() {
             </div>
 
             <div>
-              <label>Category</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value)}>
-                {categories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
+              <label>Buying Price (₹)</label>
+              <input 
+                type="number" 
+                placeholder="Purchase price" 
+                value={purchasePrice} 
+                onChange={(e) => setPurchasePrice(e.target.value)} 
+                required 
+                min="0"
+              />
+            </div>
+
+            <div>
+              <label>Selling Price (₹)</label>
+              <input 
+                type="number" 
+                placeholder="Selling price" 
+                value={sellingPrice} 
+                onChange={(e) => setSellingPrice(e.target.value)} 
+                required 
+                min="0"
+              />
+            </div>
+
+            <div>
+              <label>GST Rate (%)</label>
+              <select value={gst} onChange={(e) => setGst(e.target.value)} style={{ width: "100%" }}>
+                <option value="0">0% GST</option>
+                <option value="5">5% GST</option>
+                <option value="12">12% GST</option>
+                <option value="18">18% GST</option>
+                <option value="28">28% GST</option>
               </select>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              <div>
-                <label>Buying Price (₹)</label>
-                <input 
-                  type="number" 
-                  placeholder="Purchase price" 
-                  value={purchasePrice} 
-                  onChange={(e) => setPurchasePrice(e.target.value)} 
-                  required 
-                  min="0"
-                />
-              </div>
-              <div>
-                <label>Selling Price (₹)</label>
-                <input 
-                  type="number" 
-                  placeholder="Sales price" 
-                  value={sellingPrice} 
-                  onChange={(e) => setSellingPrice(e.target.value)} 
-                  required 
-                  min="0"
-                />
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              <div>
-                <label>GST (%)</label>
-                <select value={gst} onChange={(e) => setGst(e.target.value)}>
-                  <option value="0">0%</option>
-                  <option value="5">5%</option>
-                  <option value="12">12%</option>
-                  <option value="18">18%</option>
-                  <option value="28">28%</option>
-                </select>
-              </div>
-              <div>
-                <label>Initial Stock (Qty)</label>
-                <input 
-                  type="number" 
-                  placeholder="e.g. 100" 
-                  value={quantity} 
-                  onChange={(e) => setQuantity(e.target.value)} 
-                  min="0"
-                />
-              </div>
             </div>
 
             <button 
@@ -330,16 +308,6 @@ function Products() {
                 style={{ paddingLeft: "36px", height: "38px", fontSize: "13px" }}
               />
             </div>
-            <select 
-              value={filterCategory} 
-              onChange={(e) => setFilterCategory(e.target.value)}
-              style={{ width: "180px", height: "38px", fontSize: "13px", padding: "0 12px" }}
-            >
-              <option value="">All Categories</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
           </div>
 
           {/* Table Container */}
@@ -357,11 +325,9 @@ function Products() {
                 <thead>
                   <tr>
                     <th>Product Name</th>
-                    <th>Category</th>
                     <th style={{ textAlign: "right" }}>Buying Price</th>
                     <th style={{ textAlign: "right" }}>Selling Price</th>
                     <th style={{ textAlign: "center" }}>GST</th>
-                    <th style={{ textAlign: "center" }}>Stock</th>
                     <th style={{ textAlign: "center" }}>Actions</th>
                   </tr>
                 </thead>
@@ -369,17 +335,15 @@ function Products() {
                   {filteredProducts.map((p) => (
                     <tr key={p._id}>
                       <td style={{ fontWeight: "600", color: "var(--text-primary)" }}>{p.productName}</td>
-                      <td>
-                        <span className="badge badge-info">{p.category || "Apparel"}</span>
-                      </td>
                       <td style={{ textAlign: "right", fontWeight: "600", color: "var(--warning)" }}>
                         ₹{p.purchasePrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                       </td>
                       <td style={{ textAlign: "right", fontWeight: "600", color: "var(--success)" }}>
-                        ₹{p.sellingPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        ₹{(p.sellingPrice || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                       </td>
-                      <td style={{ textAlign: "center" }}>{p.gst || 0}%</td>
-                      <td style={{ textAlign: "center", fontWeight: "600" }}>{p.quantity || 0}</td>
+                      <td style={{ textAlign: "center", color: "var(--text-secondary)" }}>
+                        {p.gst || 0}%
+                      </td>
                       <td style={{ textAlign: "center" }}>
                         <div style={{ display: "inline-flex", gap: "8px" }}>
                           <button 
@@ -469,57 +433,36 @@ function Products() {
               </div>
 
               <div>
-                <label>Category</label>
-                <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}>
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
+                <label>Buying Price (₹)</label>
+                <input 
+                  type="number" 
+                  value={editPurchasePrice} 
+                  onChange={(e) => setEditPurchasePrice(e.target.value)} 
+                  required 
+                  min="0"
+                />
+              </div>
+
+              <div>
+                <label>Selling Price (₹)</label>
+                <input 
+                  type="number" 
+                  value={editSellingPrice} 
+                  onChange={(e) => setEditSellingPrice(e.target.value)} 
+                  required 
+                  min="0"
+                />
+              </div>
+
+              <div>
+                <label>GST Rate (%)</label>
+                <select value={editGst} onChange={(e) => setEditGst(e.target.value)}>
+                  <option value="0">0% GST</option>
+                  <option value="5">5% GST</option>
+                  <option value="12">12% GST</option>
+                  <option value="18">18% GST</option>
+                  <option value="28">28% GST</option>
                 </select>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label>Buying Price (₹)</label>
-                  <input 
-                    type="number" 
-                    value={editPurchasePrice} 
-                    onChange={(e) => setEditPurchasePrice(e.target.value)} 
-                    required 
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label>Selling Price (₹)</label>
-                  <input 
-                    type="number" 
-                    value={editSellingPrice} 
-                    onChange={(e) => setEditSellingPrice(e.target.value)} 
-                    required 
-                    min="0"
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label>GST (%)</label>
-                  <select value={editGst} onChange={(e) => setEditGst(e.target.value)}>
-                    <option value="0">0%</option>
-                    <option value="5">5%</option>
-                    <option value="12">12%</option>
-                    <option value="18">18%</option>
-                    <option value="28">28%</option>
-                  </select>
-                </div>
-                <div>
-                  <label>Current Stock (Qty)</label>
-                  <input 
-                    type="number" 
-                    value={editQuantity} 
-                    onChange={(e) => setEditQuantity(e.target.value)} 
-                    min="0"
-                  />
-                </div>
               </div>
 
               <div style={{ display: "flex", gap: "12px", marginTop: "12px", borderTop: "1px solid var(--border-color)", paddingTop: "16px" }}>

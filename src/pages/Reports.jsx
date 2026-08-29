@@ -341,12 +341,14 @@ function Reports() {
     return Object.keys(monthlyData)
       .map((month) => {
         const item = monthlyData[month];
-        const totalCost = item.productCost + item.purchases + item.gst + item.otherExpenses + item.adsExpenses + item.returnCost + item.cancellationCost;
-        const netProfit = item.sales - item.gst - item.productCost - item.purchases - item.adsExpenses - item.otherExpenses - item.returnCost - item.cancellationCost;
+        const displaySales = item.sales - item.gst - (item.returnCost || 0) - (item.cancellationCost || 0);
+        const totalInvestments = (item.purchases || 0) + (item.otherExpenses || 0) + (item.adsExpenses || 0);
+        const netProfit = displaySales - totalInvestments;
         return {
           month,
           ...item,
-          totalCost,
+          sales: displaySales,
+          totalInvestments,
           netProfit
         };
       })
@@ -381,30 +383,25 @@ function Reports() {
   // Cumulative totals
   const getCumulativeTotals = () => {
     let sales = 0;
-    let purchases = 0;
-    let gst = 0;
-    let otherExpenses = 0;
-    let adsExpenses = 0;
-    let returnCost = 0;
-    let cancellationCost = 0;
+    let totalInvestments = 0;
     let netProfit = 0;
-    let productCost = 0;
+    let gst = 0;
 
     const targetMonths = filteredMonthlyList;
 
     targetMonths.forEach((m) => {
       sales += m.sales;
-      purchases += m.purchases;
-      gst += m.gst;
-      otherExpenses += m.otherExpenses;
-      adsExpenses += m.adsExpenses || 0;
-      returnCost += m.returnCost || 0;
-      cancellationCost += m.cancellationCost || 0;
+      totalInvestments += m.totalInvestments;
       netProfit += m.netProfit;
-      productCost += m.productCost || 0;
+      gst += m.gst || 0;
     });
 
-    return { sales, purchases, gst, otherExpenses, adsExpenses, returnCost, cancellationCost, netProfit, productCost };
+    return { 
+      sales, 
+      gst, 
+      netProfit,
+      totalInvestments 
+    };
   };
 
   const totals = getCumulativeTotals();
@@ -487,7 +484,13 @@ function Reports() {
       month: m,
       profit: 0,
       orders: 0,
-      income: 0,
+      income: 0, // sales revenue
+      gst: 0,
+      purchases: 0, // investments
+      adsExpenses: 0,
+      otherExpenses: 0,
+      returnCost: 0,
+      cancellationCost: 0,
       customerReturns: 0,
       rtoReturns: 0
     }));
@@ -495,26 +498,31 @@ function Reports() {
     orders.forEach((o) => {
       const d = new Date(o.date || o.createdAt);
       if (d.getFullYear() === selectedYear) {
+        const mIdx = d.getMonth();
         const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
+        const gstRate = o.gst || o.productId?.gst || 0;
         const qtyVal = o.quantity || 1;
+        const gstAmount = (sellingVal * gstRate) / 100;
         const payStatus = o.paymentStatus || "Pending";
+        const claimAmt = o.claimAmount || 0;
 
-        // Net Profit (Order Profit)
-        data[d.getMonth()].profit += calculateOrderProfit(o);
+        data[mIdx].orders += 1;
 
-        // Total Orders Count
-        data[d.getMonth()].orders += 1;
-
-        // Income (Sales revenue ONLY from Completed orders)
         if (payStatus === "Complete") {
-          data[d.getMonth()].income += sellingVal * qtyVal;
+          data[mIdx].income += sellingVal * qtyVal;
+          data[mIdx].gst += gstAmount * qtyVal;
+        } else if (payStatus === "Cancel" || payStatus === "RTO Returned") {
+          data[mIdx].cancellationCost += 5;
+        } else if (payStatus === "Return") {
+          data[mIdx].returnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
+        } else if (payStatus === "Wrong Return") {
+          data[mIdx].returnCost += (o.claimStatus === "Approved" ? -claimAmt : 0);
         }
 
-        // Returns count split
         if (payStatus === "Return" || payStatus === "Wrong Return") {
-          data[d.getMonth()].customerReturns += 1;
+          data[mIdx].customerReturns += 1;
         } else if (payStatus === "RTO Returned") {
-          data[d.getMonth()].rtoReturns += 1;
+          data[mIdx].rtoReturns += 1;
         }
       }
     });
@@ -522,15 +530,30 @@ function Reports() {
     expenses.forEach((e) => {
       const d = new Date(e.date || e.createdAt);
       if (d.getFullYear() === selectedYear) {
-        data[d.getMonth()].profit -= e.amount;
+        const mIdx = d.getMonth();
+        if (e.category === "Advertising") {
+          data[mIdx].adsExpenses += e.amount;
+        } else {
+          data[mIdx].otherExpenses += e.amount;
+        }
       }
     });
 
     investments.forEach((inv) => {
       const d = new Date(inv.date || inv.createdAt);
       if (d.getFullYear() === selectedYear) {
-        data[d.getMonth()].profit -= inv.price || 0;
+        const mIdx = d.getMonth();
+        data[mIdx].purchases += inv.price || 0;
       }
+    });
+
+    // Calculate final profit for each month
+    data.forEach((m) => {
+      const netSales = m.income - m.gst - (m.returnCost || 0) - (m.cancellationCost || 0);
+      const totalInvest = (m.purchases || 0) + (m.adsExpenses || 0) + (m.otherExpenses || 0);
+      m.income = netSales;
+      m.purchases = totalInvest;
+      m.profit = netSales - totalInvest;
     });
 
     return data;
@@ -552,6 +575,12 @@ function Reports() {
       profit: 0,
       orders: 0,
       income: 0,
+      gst: 0,
+      purchases: 0,
+      adsExpenses: 0,
+      otherExpenses: 0,
+      returnCost: 0,
+      cancellationCost: 0,
       customerReturns: 0,
       rtoReturns: 0
     }));
@@ -562,14 +591,23 @@ function Reports() {
         const dayIdx = d.getDate() - 1;
         if (dayIdx >= 0 && dayIdx < daysInMonth) {
           const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
+          const gstRate = o.gst || o.productId?.gst || 0;
           const qtyVal = o.quantity || 1;
+          const gstAmount = (sellingVal * gstRate) / 100;
           const payStatus = o.paymentStatus || "Pending";
+          const claimAmt = o.claimAmount || 0;
 
-          data[dayIdx].profit += calculateOrderProfit(o);
           data[dayIdx].orders += 1;
 
           if (payStatus === "Complete") {
             data[dayIdx].income += sellingVal * qtyVal;
+            data[dayIdx].gst += gstAmount * qtyVal;
+          } else if (payStatus === "Cancel" || payStatus === "RTO Returned") {
+            data[dayIdx].cancellationCost += 5;
+          } else if (payStatus === "Return") {
+            data[dayIdx].returnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
+          } else if (payStatus === "Wrong Return") {
+            data[dayIdx].returnCost += (o.claimStatus === "Approved" ? -claimAmt : 0);
           }
 
           if (payStatus === "Return" || payStatus === "Wrong Return") {
@@ -586,7 +624,11 @@ function Reports() {
       if (d.getFullYear() === selectedYear && d.getMonth() === trendMonth) {
         const dayIdx = d.getDate() - 1;
         if (dayIdx >= 0 && dayIdx < daysInMonth) {
-          data[dayIdx].profit -= Number(e.amount) || 0;
+          if (e.category === "Advertising") {
+            data[dayIdx].adsExpenses += Number(e.amount) || 0;
+          } else {
+            data[dayIdx].otherExpenses += Number(e.amount) || 0;
+          }
         }
       }
     });
@@ -596,9 +638,18 @@ function Reports() {
       if (d.getFullYear() === selectedYear && d.getMonth() === trendMonth) {
         const dayIdx = d.getDate() - 1;
         if (dayIdx >= 0 && dayIdx < daysInMonth) {
-          data[dayIdx].profit -= Number(inv.price) || 0;
+          data[dayIdx].purchases += Number(inv.price) || 0;
         }
       }
+    });
+
+    // Calculate final profit for each day
+    data.forEach((d) => {
+      const netSales = d.income - d.gst - (d.returnCost || 0) - (d.cancellationCost || 0);
+      const totalInvest = (d.purchases || 0) + (d.adsExpenses || 0) + (d.otherExpenses || 0);
+      d.income = netSales;
+      d.purchases = totalInvest;
+      d.profit = netSales - totalInvest;
     });
 
     return data;
@@ -741,10 +792,11 @@ function Reports() {
   const exportCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
     csvContent += "Monthly Profit and Loss Statement - Seller Manager\n\n";
-    csvContent += "Month,Total Sales (Revenue),Product Cost (COGS),GST Cost,Ads Cost,Other Expenses,Return Cost,Cancellation Cost,Net Profit/Loss\n";
+    csvContent += "Month,Total Sales (Revenue),Total Investments (₹) (Stock+Ads+Exp),GST Cost,Return Cost,Cancellation Cost,Net Profit/Loss\n";
 
     monthlyList.forEach((m) => {
-      csvContent += `"${m.month}",${m.sales.toFixed(2)},${(m.productCost || 0).toFixed(2)},${m.gst.toFixed(2)},${(m.adsExpenses || 0).toFixed(2)},${m.otherExpenses.toFixed(2)},${(m.returnCost || 0).toFixed(2)},${(m.cancellationCost || 0).toFixed(2)},${m.netProfit.toFixed(2)}\n`;
+      const totalInvest = (m.purchases || 0) + (m.adsExpenses || 0) + (m.otherExpenses || 0);
+      csvContent += `"${m.month}",${m.sales.toFixed(2)},${totalInvest.toFixed(2)},${m.gst.toFixed(2)},${(m.returnCost || 0).toFixed(2)},${(m.cancellationCost || 0).toFixed(2)},${m.netProfit.toFixed(2)}\n`;
     });
 
     const encodedUri = encodeURI(csvContent);
@@ -860,7 +912,7 @@ function Reports() {
             <span className="stat-card-title">Total Investments</span>
             <div className="stat-card-icon"><FaWallet /></div>
           </div>
-          <div className="stat-card-value">₹{(totals.purchases + totals.otherExpenses + totals.adsExpenses).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          <div className="stat-card-value">₹{totals.totalInvestments.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
           <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total stock, ads, and setup investment cost</div>
         </div>
 
@@ -1428,10 +1480,8 @@ function Reports() {
                   <tr>
                     <th>Month</th>
                     <th>Sales (₹)</th>
-                    <th>Product Cost (₹)</th>
+                    <th>Total Investments (₹)</th>
                     <th>GST Cost (₹)</th>
-                    <th>Ads Cost (₹)</th>
-                    <th>Other Exp (₹)</th>
                     <th>Return Cost (₹)</th>
                     <th>Cancel Cost (₹)</th>
                     <th>Net Profit (₹)</th>
@@ -1449,10 +1499,8 @@ function Reports() {
                       <tr key={index}>
                         <td style={{ fontWeight: "700", color: "var(--text-primary)" }}>{m.month}</td>
                         <td>₹{m.sales.toLocaleString()}</td>
-                        <td>₹{(m.productCost || 0).toLocaleString()}</td>
+                        <td>₹{((m.purchases || 0) + (m.adsExpenses || 0) + (m.otherExpenses || 0)).toLocaleString()}</td>
                         <td>₹{m.gst.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
-                        <td>₹{(m.adsExpenses || 0).toLocaleString()}</td>
-                        <td>₹{m.otherExpenses.toLocaleString()}</td>
                         <td>₹{(m.returnCost || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
                         <td>₹{(m.cancellationCost || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
                         <td style={{ fontWeight: "800", fontSize: "15px", color: m.netProfit >= 0 ? "var(--success)" : "var(--danger)" }}>

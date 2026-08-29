@@ -124,9 +124,6 @@ const normalizeKey = (str) => {
   if (cleaned.includes("airbra")) {
     return "airbra";
   }
-  if (cleaned.includes("netbra") || cleaned.includes("net")) {
-    return "netbra";
-  }
 
   // Shapewear items MUST contain shape/wear/body
   if (cleaned.includes("shape") || cleaned.includes("wear") || cleaned.includes("body")) {
@@ -274,9 +271,46 @@ export const getStockSummary = async (req, res) => {
         stockMap[blackKey].totalSoldPcs += soldQty;
         stockMap[creamKey].totalSoldPcs += soldQty;
       } else {
-        ensureStockEntry(normKey, canonicalName);
-        const actualPcsSold = soldQty * packMultiplier;
-        stockMap[normKey].totalSoldPcs += actualPcsSold;
+        const isNetBra = normKey.startsWith("netbra");
+        const sizeMatch = normKey.match(/\d{2}$/);
+        const chestSize = sizeMatch ? sizeMatch[0] : "";
+        const defaultKey = `netbra${chestSize}`;
+
+        if (isNetBra && chestSize && normKey === defaultKey) {
+          // Net Bra order without color (e.g. Pack of 6). Deduct in units of 3-packs
+          const totalPcs = soldQty * packMultiplier;
+          const numberOfPacks = Math.ceil(totalPcs / 3);
+
+          for (let p = 0; p < numberOfPacks; p++) {
+            // Find all matching color keys in stockMap for this chestSize
+            const colorKeys = Object.keys(stockMap).filter(
+              k => k.startsWith("netbra") && k.endsWith(chestSize) && k !== defaultKey
+            );
+
+            let bestKey = "";
+            let maxAvailable = -Infinity;
+
+            colorKeys.forEach((k) => {
+              const available = stockMap[k].totalPurchasedPcs - stockMap[k].totalSoldPcs;
+              if (available > maxAvailable) {
+                maxAvailable = available;
+                bestKey = k;
+              }
+            });
+
+            if (bestKey) {
+              stockMap[bestKey].totalSoldPcs += 3;
+            } else {
+              ensureStockEntry(defaultKey, `Net Bra ${chestSize}`);
+              stockMap[defaultKey].totalSoldPcs += 3;
+            }
+          }
+        } else {
+          // Standard deduction
+          ensureStockEntry(normKey, canonicalName);
+          const actualPcsSold = soldQty * packMultiplier;
+          stockMap[normKey].totalSoldPcs += actualPcsSold;
+        }
       }
 
       // B. Packaging Materials (Kothadi & Thank You Card) Deduction per order:

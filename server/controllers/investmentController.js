@@ -77,6 +77,32 @@ export const deleteInvestment = async (req, res) => {
   }
 };
 
+// Bulk Delete Investments
+export const bulkDeleteInvestments = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "Invalid investment IDs" });
+    }
+
+    const userId = req.user.id;
+
+    const result = await Investment.deleteMany({
+      _id: { $in: ids },
+      userId
+    });
+
+    res.status(200).json({
+      message: `${result.deletedCount} investments deleted successfully`,
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
 // Extract pack multiplier from product name (e.g. "Air Bra (Pack of 3)" -> 3, "Pack of 6" -> 6)
 const getPackMultiplier = (name) => {
   if (!name) return 1;

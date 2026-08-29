@@ -6,6 +6,7 @@ import {
   updateInvestment,
   deleteInvestment,
   getStockSummary,
+  bulkDeleteInvestments,
 } from "../controllers/investmentController.js";
 
 const router = express.Router();
@@ -24,6 +25,9 @@ router.put("/:id", authMiddleware, updateInvestment);
 
 // Delete Investment
 router.delete("/:id", authMiddleware, deleteInvestment);
+
+// Bulk Delete Investments
+router.post("/bulk-delete", authMiddleware, bulkDeleteInvestments);
 
 export default router;
 

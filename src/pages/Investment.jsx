@@ -35,6 +35,8 @@ function Investment() {
   // Custom Modal States
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+  const [selectedInvestmentIds, setSelectedInvestmentIds] = useState([]);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertTitle, setAlertTitle] = useState("Alert");
   const [alertMessage, setAlertMessage] = useState("");
@@ -200,6 +202,57 @@ function Investment() {
     setEditStatus(inv.status || "Pending");
   };
 
+  // Select / Deselect individual checkbox
+  const handleSelectInvestment = (id) => {
+    setSelectedInvestmentIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  // Select / Deselect all filtered investments
+  const handleSelectAllInvestments = () => {
+    const allFilteredIds = filteredInvestments.map(inv => inv._id);
+    const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedInvestmentIds.includes(id));
+
+    if (isAllSelected) {
+      // Deselect all filtered
+      setSelectedInvestmentIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+    } else {
+      // Select all filtered (keeping any other selections)
+      setSelectedInvestmentIds(prev => Array.from(new Set([...prev, ...allFilteredIds])));
+    }
+  };
+
+  // Bulk Delete investments handler
+  const handleConfirmBulkDelete = async () => {
+    setBulkDeleteConfirmOpen(false);
+    if (selectedInvestmentIds.length === 0) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/investments/bulk-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({ ids: selectedInvestmentIds })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Failed to bulk delete investments");
+      }
+
+      const resData = await res.json();
+      showAlert(`✅ ${resData.message}`, "Success");
+      setSelectedInvestmentIds([]);
+      fetchInvestments();
+      fetchStockSummary();
+    } catch (err) {
+      showAlert(err.message, "Error");
+    }
+  };
+
   // Edit modal submit handler
   const handleEditSubmit = async (e) => {
     e.preventDefault();
@@ -260,6 +313,10 @@ function Investment() {
       return matchesSearch && matchesDate && matchesStatus;
     });
   }, [investments, searchText, filterDate, filterStatus]);
+
+  const isAllSelected = useMemo(() => {
+    return filteredInvestments.length > 0 && filteredInvestments.every(inv => selectedInvestmentIds.includes(inv._id));
+  }, [filteredInvestments, selectedInvestmentIds]);
 
   // Compute stats on filtered list
   const stats = useMemo(() => {
@@ -711,19 +768,81 @@ function Investment() {
       ) : error ? (
         <div style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "12px", padding: "16px", color: "var(--danger)", fontSize: "14px" }}>Error: {error}</div>
       ) : (
-        <div 
-          style={{ 
-            background: "var(--glass-bg)", 
-            backdropFilter: "blur(12px)", 
-            borderRadius: "12px", 
-            border: "1px solid var(--border-color)", 
-            overflowX: "auto", 
-            boxShadow: "var(--glass-shadow)" 
-          }}
-        >
+        <>
+          {/* Bulk Action Toolbar */}
+          {selectedInvestmentIds.length > 0 && (
+            <div 
+              style={{
+                background: "rgba(239, 68, 68, 0.1)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                borderRadius: "8px",
+                padding: "12px 20px",
+                marginBottom: "16px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                boxShadow: "var(--glass-shadow)"
+              }}
+            >
+              <div style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: "600" }}>
+                Selected <strong style={{ color: "#ef4444" }}>{selectedInvestmentIds.length}</strong> items from list
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button 
+                  type="button"
+                  onClick={() => setSelectedInvestmentIds([])}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid var(--border-color)",
+                    color: "var(--text-secondary)",
+                    padding: "8px 16px",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    cursor: "pointer"
+                  }}
+                >
+                  Clear Selection
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setBulkDeleteConfirmOpen(true)}
+                  style={{
+                    background: "#ef4444",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 16px",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  <FaTrash /> Delete Selected
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div 
+            style={{ 
+              background: "var(--glass-bg)", 
+              backdropFilter: "blur(12px)", 
+              borderRadius: "12px", 
+              border: "1px solid var(--border-color)", 
+              overflowX: "auto", 
+              boxShadow: "var(--glass-shadow)" 
+            }}
+          >
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
             <thead>
               <tr style={{ background: "rgba(99, 102, 241, 0.04)", borderBottom: "1px solid var(--border-color)" }}>
+                <th style={{ padding: "14px 16px", textAlign: "center", width: "40px" }}>
+                  <input type="checkbox" checked={isAllSelected} onChange={handleSelectAllInvestments} style={{ cursor: "pointer" }} />
+                </th>
                 <th style={{ padding: "14px 16px", textAlign: "left", color: "var(--text-secondary)", fontWeight: "600" }}>Date</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", color: "var(--text-secondary)", fontWeight: "600" }}>Product Name</th>
                 <th style={{ padding: "14px 16px", textAlign: "center", color: "var(--text-secondary)", fontWeight: "600" }}>Quantity</th>
@@ -735,12 +854,20 @@ function Investment() {
             <tbody>
               {filteredInvestments.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)", fontSize: "14px" }}>No transactions logged.</td>
+                  <td colSpan="7" style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)", fontSize: "14px" }}>No transactions logged.</td>
                 </tr>
               ) : (
                 filteredInvestments.map((inv) => {
                   return (
                     <tr key={inv._id} className="ledger-row-hover" style={{ borderBottom: "1px solid var(--border-color)", transition: "background 0.2s" }}>
+                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedInvestmentIds.includes(inv._id)} 
+                          onChange={() => handleSelectInvestment(inv._id)} 
+                          style={{ cursor: "pointer" }}
+                        />
+                      </td>
                       <td style={{ padding: "14px 16px", color: "var(--text-primary)" }}>
                         {new Date(inv.date || inv.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                       </td>
@@ -835,7 +962,8 @@ function Investment() {
             </tbody>
           </table>
         </div>
-      )}
+      </>
+    )}
 
       {/* Edit Sale Transaction Modal */}
       {editingInvestment && (
@@ -917,6 +1045,16 @@ function Investment() {
         type="info"
       />
 
+      <ConfirmModal
+        isOpen={bulkDeleteConfirmOpen}
+        title="Bulk Delete Investments"
+        message={`Are you sure you want to delete ${selectedInvestmentIds.length} selected investments? This action cannot be undone.`}
+        onConfirm={handleConfirmBulkDelete}
+        onCancel={() => setBulkDeleteConfirmOpen(false)}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 }

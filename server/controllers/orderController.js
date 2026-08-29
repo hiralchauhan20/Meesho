@@ -83,6 +83,34 @@ export const updateOrderStatus = async (req, res) => {
     // Prepare update data
     const updateData = { ...req.body };
 
+    // Check duplicate orderNo for this user (if orderNo provided and changed)
+    if (updateData.orderNo && updateData.orderNo.trim()) {
+      const existingOrderNo = await Order.findOne({ 
+        userId, 
+        orderNo: updateData.orderNo.trim(), 
+        _id: { $ne: orderId } 
+      });
+      if (existingOrderNo) {
+        return res.status(400).json({
+          message: `Order ID "${updateData.orderNo.trim()}" already exists on another order!`
+        });
+      }
+    }
+
+    // Check duplicate awbId for this user (if awbId provided and changed)
+    if (updateData.awbId && updateData.awbId.trim()) {
+      const existingAwbId = await Order.findOne({ 
+        userId, 
+        awbId: updateData.awbId.trim(), 
+        _id: { $ne: orderId } 
+      });
+      if (existingAwbId) {
+        return res.status(400).json({
+          message: `Tracking ID (AWB) "${updateData.awbId.trim()}" already exists on another order!`
+        });
+      }
+    }
+
     // If changing status, update statusChangedAt accordingly
     if (updateData.paymentStatus && existingOrder.paymentStatus !== updateData.paymentStatus) {
       if (updateData.paymentStatus === "Pending") {

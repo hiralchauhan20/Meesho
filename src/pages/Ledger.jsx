@@ -920,58 +920,6 @@ function Ledger() {
     }
   };
 
-  const handleToggleSelect = (id) => {
-    setSelectedOrderIds(prev =>
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleToggleSelectAll = () => {
-    const visibleIds = filteredOrders.map(o => o._id);
-    const allVisibleSelected = visibleIds.every(id => selectedOrderIds.includes(id));
-
-    if (allVisibleSelected) {
-      setSelectedOrderIds(prev => prev.filter(id => !visibleIds.includes(id)));
-    } else {
-      setSelectedOrderIds(prev => {
-        const union = new Set([...prev, ...visibleIds]);
-        return Array.from(union);
-      });
-    }
-  };
-
-  const handleBulkDeleteClick = () => {
-    if (selectedOrderIds.length === 0) return;
-    setBulkDeleteConfirmOpen(true);
-  };
-
-  const handleConfirmBulkDelete = async () => {
-    setBulkDeleteConfirmOpen(false);
-    if (selectedOrderIds.length === 0) return;
-
-    try {
-      const res = await fetch(`${API_URL}/api/orders/bulk-delete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        body: JSON.stringify({ ids: selectedOrderIds })
-      });
-
-      const resData = await res.json();
-      if (!res.ok) throw new Error(resData.message || "Failed to bulk delete entries");
-
-      fetchOrders();
-      fetchStockSummary();
-      showAlert(resData.message, "Success");
-    } catch (err) {
-      showAlert(err.message, "Error");
-    }
-  };
-
-  const isAllSelected = filteredOrders.length > 0 && filteredOrders.every(o => selectedOrderIds.includes(o._id));
-
   const handleStatusChange = async (id, newStatus) => {
     try {
       const res = await fetch(`${API_URL}/api/orders/${id}`, {
@@ -1126,6 +1074,58 @@ function Ledger() {
 
     return { totalQty, totalProfit, totalSales, totalReturnCost };
   }, [filteredOrders]);
+
+  const handleToggleSelect = (id) => {
+    setSelectedOrderIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    const visibleIds = filteredOrders.map(o => o._id);
+    const allVisibleSelected = visibleIds.every(id => selectedOrderIds.includes(id));
+
+    if (allVisibleSelected) {
+      setSelectedOrderIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      setSelectedOrderIds(prev => {
+        const union = new Set([...prev, ...visibleIds]);
+        return Array.from(union);
+      });
+    }
+  };
+
+  const handleBulkDeleteClick = () => {
+    if (selectedOrderIds.length === 0) return;
+    setBulkDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    setBulkDeleteConfirmOpen(false);
+    if (selectedOrderIds.length === 0) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/orders/bulk-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({ ids: selectedOrderIds })
+      });
+
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.message || "Failed to bulk delete entries");
+
+      fetchOrders();
+      fetchStockSummary();
+      showAlert(resData.message, "Success");
+    } catch (err) {
+      showAlert(err.message, "Error");
+    }
+  };
+
+  const isAllSelected = filteredOrders.length > 0 && filteredOrders.every(o => selectedOrderIds.includes(o._id));
 
   const claimStats = useMemo(() => {
     let totalClaims = 0;

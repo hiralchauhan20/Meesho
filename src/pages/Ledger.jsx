@@ -123,6 +123,8 @@ function Ledger() {
   // Custom Modal States
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertTitle, setAlertTitle] = useState("Alert");
   const [alertMessage, setAlertMessage] = useState("");
@@ -800,6 +802,7 @@ function Ledger() {
       // Sort by date descending
       const sorted = data.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
       setOrders(sorted);
+      setSelectedOrderIds([]);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -916,6 +919,58 @@ function Ledger() {
       setDeleteId(null);
     }
   };
+
+  const handleToggleSelect = (id) => {
+    setSelectedOrderIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    const visibleIds = filteredOrders.map(o => o._id);
+    const allVisibleSelected = visibleIds.every(id => selectedOrderIds.includes(id));
+
+    if (allVisibleSelected) {
+      setSelectedOrderIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      setSelectedOrderIds(prev => {
+        const union = new Set([...prev, ...visibleIds]);
+        return Array.from(union);
+      });
+    }
+  };
+
+  const handleBulkDeleteClick = () => {
+    if (selectedOrderIds.length === 0) return;
+    setBulkDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    setBulkDeleteConfirmOpen(false);
+    if (selectedOrderIds.length === 0) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/orders/bulk-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({ ids: selectedOrderIds })
+      });
+
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.message || "Failed to bulk delete entries");
+
+      fetchOrders();
+      fetchStockSummary();
+      showAlert(resData.message, "Success");
+    } catch (err) {
+      showAlert(err.message, "Error");
+    }
+  };
+
+  const isAllSelected = filteredOrders.length > 0 && filteredOrders.every(o => selectedOrderIds.includes(o._id));
 
   const handleStatusChange = async (id, newStatus) => {
     try {
@@ -1550,6 +1605,66 @@ function Ledger() {
           Loading accounts...
         </div>
       ) : (
+        <>
+          {/* Bulk Action Toolbar */}
+          {selectedOrderIds.length > 0 && (
+        <div 
+          className="animate-fade"
+          style={{
+            background: "rgba(239, 68, 68, 0.1)",
+            border: "1px solid rgba(239, 68, 68, 0.3)",
+            borderRadius: "8px",
+            padding: "12px 20px",
+            marginBottom: "16px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            boxShadow: "var(--glass-shadow)"
+          }}
+        >
+          <div style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: "600" }}>
+            Selected <strong style={{ color: "#ef4444" }}>{selectedOrderIds.length}</strong> orders from list
+          </div>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button 
+              type="button"
+              onClick={() => setSelectedOrderIds([])}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--border-color)",
+                color: "var(--text-secondary)",
+                padding: "8px 16px",
+                borderRadius: "6px",
+                fontSize: "13px",
+                fontWeight: "600",
+                cursor: "pointer"
+              }}
+            >
+              Clear Selection
+            </button>
+            <button 
+              type="button"
+              onClick={handleBulkDeleteClick}
+              style={{
+                background: "#ef4444",
+                border: "none",
+                color: "#ffffff",
+                padding: "8px 16px",
+                borderRadius: "6px",
+                fontSize: "13px",
+                fontWeight: "600",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px"
+              }}
+            >
+              <FaTrash /> Delete Selected
+            </button>
+          </div>
+        </div>
+      )}
+
         <div 
           className="table-container animate-fade" 
           style={{ 
@@ -1563,6 +1678,9 @@ function Ledger() {
           <table className="premium-table" style={{ width: "100%", borderCollapse: "collapse", minWidth: "1000px" }}>
             <thead>
               <tr style={{ background: "rgba(0, 0, 0, 0.25)", borderBottom: "2px solid var(--border-color)" }}>
+                <th style={{ padding: "14px 16px", textAlign: "center", width: "40px" }}>
+                  <input type="checkbox" checked={isAllSelected} onChange={handleToggleSelectAll} style={{ cursor: "pointer" }} />
+                </th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Date</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Order No.</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>AWB ID</th>
@@ -1582,7 +1700,7 @@ function Ledger() {
             <tbody>
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="14" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
+                  <td colSpan="15" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
                     {orders.length === 0 ? "No transactions logged in your accounts. Insert a row above to get started." : "No orders match your search/filter. Try different criteria or clear filters."}
                   </td>
                 </tr>
@@ -1613,6 +1731,14 @@ function Ledger() {
                       }}
                       className="ledger-row-hover"
                     >
+                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedOrderIds.includes(o._id)} 
+                          onChange={() => handleToggleSelect(o._id)} 
+                          style={{ cursor: "pointer" }}
+                        />
+                      </td>
                       <td style={{ padding: "14px 16px", fontSize: "13px", color: "var(--text-secondary)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                           <FaCalendarAlt style={{ color: "var(--text-muted)" }} />
@@ -1792,7 +1918,7 @@ function Ledger() {
                     borderBottom: "2px solid var(--primary)" 
                   }}
                 >
-                  <td colSpan="5" style={{ padding: "16px", textTransform: "uppercase", fontSize: "12px", color: "var(--primary)", trackingSpacing: "1px" }}>
+                  <td colSpan="6" style={{ padding: "16px", textTransform: "uppercase", fontSize: "12px", color: "var(--primary)", trackingSpacing: "1px" }}>
                     <FaFileInvoice /> Accounts Totals
                   </td>
                   <td style={{ padding: "16px", textAlign: "right", fontSize: "13px", color: "var(--text-primary)" }}>
@@ -1822,7 +1948,8 @@ function Ledger() {
             </tbody>
           </table>
         </div>
-      )}
+      </>
+    )}
 
       {/* Edit Sale Transaction Modal */}
       {editingOrder && (
@@ -2241,6 +2368,19 @@ function Ledger() {
         onCancel={() => {
           setDeleteConfirmOpen(false);
           setDeleteId(null);
+        }}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
+
+      <ConfirmModal
+        isOpen={bulkDeleteConfirmOpen}
+        title="Delete Selected Orders"
+        message={`Are you sure you want to delete the ${selectedOrderIds.length} selected order entries from the sales ledger? This action cannot be undone.`}
+        onConfirm={handleConfirmBulkDelete}
+        onCancel={() => {
+          setBulkDeleteConfirmOpen(false);
         }}
         confirmText="Delete"
         cancelText="Cancel"

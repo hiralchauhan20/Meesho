@@ -7,6 +7,7 @@ import {
   updateOrderStatus,
   deleteOrder,
   bulkAddOrders,
+  bulkDeleteOrders,
 } from "../controllers/orderController.js";
 
 const router = express.Router();
@@ -16,6 +17,9 @@ router.post("/add", authMiddleware, addOrder);
 
 // Bulk Add Orders
 router.post("/bulk-add", authMiddleware, bulkAddOrders);
+
+// Bulk Delete Orders
+router.post("/bulk-delete", authMiddleware, bulkDeleteOrders);
 
 // Get All Orders
 router.get("/", authMiddleware, getOrders);

@@ -211,3 +211,55 @@ export const bulkAddOrders = async (req, res) => {
     });
   }
 };
+
+// Bulk Delete Orders
+export const bulkDeleteOrders = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    const userId = req.user.id;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "No order IDs provided" });
+    }
+
+    const selectedOrders = await Order.find({ _id: { $in: ids }, userId });
+
+    const deletableIds = [];
+    const lockedIds = [];
+
+    selectedOrders.forEach((o) => {
+      const isCurrentlyLockedStatus = o.paymentStatus && o.paymentStatus !== "Pending";
+      let isLocked = false;
+      if (isCurrentlyLockedStatus) {
+        const lockBaseTime = o.statusChangedAt || o.updatedAt || o.createdAt;
+        if (lockBaseTime && (new Date() - new Date(lockBaseTime)) > 24 * 60 * 60 * 1000) {
+          isLocked = true;
+        }
+      }
+      if (isLocked) {
+        lockedIds.push(o._id);
+      } else {
+        deletableIds.push(o._id);
+      }
+    });
+
+    if (deletableIds.length === 0) {
+      return res.status(400).json({
+        message: "All selected orders are locked and cannot be deleted after 24 hours of status change."
+      });
+    }
+
+    await Order.deleteMany({ _id: { $in: deletableIds }, userId });
+
+    res.status(200).json({
+      message: `Successfully deleted ${deletableIds.length} orders.${lockedIds.length > 0 ? ` Skipped ${lockedIds.length} locked orders.` : ""}`,
+      deletedCount: deletableIds.length,
+      skippedCount: lockedIds.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+

@@ -111,7 +111,7 @@ const getBaseProductName = (name) => {
 const normalizeKey = (str) => {
   if (!str) return "";
   let cleaned = str.toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (cleaned.includes("thankyoucard") || cleaned.includes("thankyou") || cleaned.includes("thankcard") || cleaned.includes("thankucard") || cleaned.includes("thankscard") || cleaned.includes("thankscard")) {
+  if (cleaned.includes("thankyoucard") || cleaned.includes("thankyou") || cleaned.includes("thankcard") || cleaned.includes("thankucard") || cleaned.includes("thankscard")) {
     return "thankyoucard";
   }
   if (cleaned.includes("megical") || cleaned.includes("magical") || cleaned.includes("magicbra")) {
@@ -120,18 +120,24 @@ const normalizeKey = (str) => {
   if (cleaned.includes("airbra")) {
     return "airbra";
   }
-  if (cleaned.includes("blackandcream") || (cleaned.includes("black") && cleaned.includes("cream"))) {
-    return "shapewearblackandcream";
+  if (cleaned.includes("netbra") || cleaned.includes("net")) {
+    return "netbra";
   }
-  if (cleaned.includes("shapewearblack") || cleaned.includes("shapeblack") || (cleaned.includes("shape") && cleaned.includes("black"))) {
+
+  // Shapewear items MUST contain shape/wear/body
+  if (cleaned.includes("shape") || cleaned.includes("wear") || cleaned.includes("body")) {
+    if (cleaned.includes("blackandcream") || (cleaned.includes("black") && cleaned.includes("cream"))) {
+      return "shapewearblackandcream";
+    }
+    if (cleaned.includes("black")) {
+      return "shapewearblack";
+    }
+    if (cleaned.includes("cream")) {
+      return "shapewearcream";
+    }
     return "shapewearblack";
   }
-  if (cleaned.includes("shapewearcream") || cleaned.includes("shapecream") || (cleaned.includes("shape") && cleaned.includes("cream"))) {
-    return "shapewearcream";
-  }
-  if (cleaned.includes("shapware") || cleaned.includes("shapewear") || cleaned.includes("shape")) {
-    return "shapewearblack";
-  }
+
   if (cleaned.includes("meeshomotikothadi") || (cleaned.includes("meesho") && cleaned.includes("moti") && (cleaned.includes("kothadi") || cleaned.includes("bag")))) {
     return "meeshomotikothadi";
   }

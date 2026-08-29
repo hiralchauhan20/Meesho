@@ -450,8 +450,8 @@ function Ledger() {
   };
 
   const handlePdfUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
 
     setPdfParsing(true);
     setPdfProgress("Loading PDF.js extraction library...");
@@ -472,61 +472,66 @@ function Ledger() {
         document.head.appendChild(script);
       });
 
-      setPdfProgress("Reading PDF file...");
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const totalPages = pdf.numPages;
       const parsedRows = [];
 
-      for (let i = 1; i <= totalPages; i++) {
-        setPdfProgress(`Extracting page ${i} of ${totalPages}...`);
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const textItems = textContent.items.map(item => item.str);
-        const pageText = textItems.join("\n");
+      for (let fIdx = 0; fIdx < files.length; fIdx++) {
+        const file = files[fIdx];
+        setPdfProgress(`Reading file ${fIdx + 1} of ${files.length} (${file.name})...`);
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const totalPages = pdf.numPages;
 
-        if (!pageText.trim()) continue;
+        for (let i = 1; i <= totalPages; i++) {
+          setPdfProgress(`File ${fIdx + 1}/${files.length}: page ${i} of ${totalPages}...`);
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const textItems = textContent.items.map(item => item.str);
+          const pageText = textItems.join("\n");
 
-        const orderNoMatch = extractOrderNo(pageText);
-        const awbIdMatch = extractAwbId(pageText, orderNoMatch);
-        const courier = extractCourierPartner(pageText);
-        const state = extractCustomerState(pageText, INDIA_STATES);
-        const qty = extractQuantity(pageText);
-        const dateMatch = extractOrderDate(pageText);
+          if (!pageText.trim()) continue;
 
-        const matchedP = autoMatchProduct(pageText, products);
-        
-        const isDuplicateOrder = orderNoMatch && orders.some(o => o.orderNo && o.orderNo.trim() === orderNoMatch.trim());
-        const isDuplicateAwb = awbIdMatch && orders.some(o => o.awbId && o.awbId.trim() === awbIdMatch.trim());
+          const orderNoMatch = extractOrderNo(pageText);
+          const awbIdMatch = extractAwbId(pageText, orderNoMatch);
+          const courier = extractCourierPartner(pageText);
+          const state = extractCustomerState(pageText, INDIA_STATES);
+          const qty = extractQuantity(pageText);
+          const dateMatch = extractOrderDate(pageText);
 
-        parsedRows.push({
-          tempId: `parsed-${i}-${Date.now()}`,
-          pageNum: i,
-          date: dateMatch,
-          orderNo: orderNoMatch,
-          awbId: awbIdMatch,
-          courierPartner: courier,
-          customerState: state,
-          quantity: String(qty),
-          gst: matchedP ? String(matchedP.gst) : "18",
-          productId: matchedP ? matchedP._id : "",
-          productName: matchedP ? matchedP.productName : "",
-          purchasePrice: matchedP ? String(matchedP.purchasePrice) : "",
-          sellingPrice: matchedP ? String(matchedP.sellingPrice) : "",
-          pageText: pageText,
-          isDuplicate: isDuplicateOrder || isDuplicateAwb,
-          duplicateReason: isDuplicateOrder && isDuplicateAwb 
-            ? "Duplicate Order ID & Tracking ID" 
-            : isDuplicateOrder 
-              ? "Duplicate Order ID" 
-              : isDuplicateAwb 
-                ? "Duplicate Tracking ID (AWB)" 
-                : ""
-        });
+          const matchedP = autoMatchProduct(pageText, products);
+          
+          const isDuplicateOrder = orderNoMatch && orders.some(o => o.orderNo && o.orderNo.trim() === orderNoMatch.trim());
+          const isDuplicateAwb = awbIdMatch && orders.some(o => o.awbId && o.awbId.trim() === awbIdMatch.trim());
+
+          parsedRows.push({
+            tempId: `parsed-${fIdx}-${i}-${Date.now()}-${Math.random()}`,
+            pageNum: i,
+            fileName: file.name,
+            date: dateMatch,
+            orderNo: orderNoMatch,
+            awbId: awbIdMatch,
+            courierPartner: courier,
+            customerState: state,
+            quantity: String(qty),
+            gst: matchedP ? String(matchedP.gst) : "18",
+            productId: matchedP ? matchedP._id : "",
+            productName: matchedP ? matchedP.productName : "",
+            purchasePrice: matchedP ? String(matchedP.purchasePrice) : "",
+            sellingPrice: matchedP ? String(matchedP.sellingPrice) : "",
+            pageText: pageText,
+            isDuplicate: isDuplicateOrder || isDuplicateAwb,
+            duplicateReason: isDuplicateOrder && isDuplicateAwb 
+              ? "Duplicate Order ID & Tracking ID" 
+              : isDuplicateOrder 
+                ? "Duplicate Order ID" 
+                : isDuplicateAwb 
+                  ? "Duplicate Tracking ID (AWB)" 
+                  : ""
+          });
+        }
       }
 
       if (parsedRows.length === 0) {
-        throw new Error("Could not find any readable text/shipping labels in this PDF. Please ensure this is a standard digital Meesho shipping label PDF.");
+        throw new Error("Could not find any readable text/shipping labels in the selected PDF files. Please ensure they are standard digital Meesho shipping label PDFs.");
       }
 
       setParsedOrders(parsedRows);
@@ -1338,6 +1343,7 @@ function Ledger() {
         <input 
           type="file" 
           accept=".pdf" 
+          multiple
           onChange={handlePdfUpload}
           style={{
             position: "absolute",
@@ -1358,7 +1364,7 @@ function Ledger() {
               {pdfParsing ? pdfProgress : "Bulk Import Meesho Labels PDF"}
             </h4>
             <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "4px" }}>
-              {pdfParsing ? "Processing labels... please wait." : "Drag & drop or click to upload your Meesho shipping labels PDF"}
+              {pdfParsing ? "Processing labels... please wait." : "Drag & drop or click to upload one or more Meesho shipping label PDF files"}
             </p>
           </div>
         </div>
@@ -1997,7 +2003,7 @@ function Ledger() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--border-color)", textTransform: "uppercase", fontSize: "11px", color: "var(--text-secondary)" }}>
-                    <th style={{ padding: "10px 8px", textAlign: "center", width: "40px" }}>Page</th>
+                    <th style={{ padding: "10px 8px", textAlign: "left", width: "120px" }}>File / Page</th>
                     <th style={{ padding: "10px 8px", textAlign: "left", width: "140px" }}>Order ID</th>
                     <th style={{ padding: "10px 8px", textAlign: "left", width: "130px" }}>AWB ID</th>
                     <th style={{ padding: "10px 8px", textAlign: "left", width: "110px" }}>Courier</th>
@@ -2017,7 +2023,7 @@ function Ledger() {
                           background: item.isDuplicate ? "rgba(239, 68, 68, 0.05)" : "transparent"
                         }}
                       >
-                        <td style={{ padding: "10px 8px", textAlign: "center", color: "var(--text-muted)" }}>{item.pageNum}</td>
+                        <td style={{ padding: "10px 8px", textAlign: "left", color: "var(--text-muted)", fontSize: "11px" }}>{item.fileName ? `${item.fileName} (p.${item.pageNum})` : item.pageNum}</td>
                       <td style={{ padding: "6px 8px" }}>
                         <input 
                           type="text" 
@@ -2169,7 +2175,7 @@ function Ledger() {
                       <tr style={{ background: "rgba(255, 255, 255, 0.02)" }}>
                         <td colSpan="9" style={{ padding: "12px 20px" }}>
                           <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "6px", fontWeight: "bold" }}>
-                            RAW TEXT EXTRACTED FROM PAGE {item.pageNum}:
+                            RAW TEXT EXTRACTED FROM FILE: {item.fileName || 'N/A'} (PAGE {item.pageNum}):
                           </div>
                           <pre style={{
                             whiteSpace: "pre-wrap",

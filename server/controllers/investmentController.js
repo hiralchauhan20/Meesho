@@ -104,6 +104,10 @@ const getBaseProductName = (name) => {
     .replace(/\(?\s*\d+\s*pcs\s*\)?/gi, "")
     .replace(/\(\s*\)/g, "")
     .trim();
+  
+  // Strip cup size letters (A, B, C, D) after chest size numbers (e.g. 32A -> 32, 34B -> 34)
+  base = base.replace(/\b(\d{2})\s*[a-d]\b/gi, "$1");
+
   return base || name.trim();
 };
 

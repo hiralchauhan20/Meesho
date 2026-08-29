@@ -199,6 +199,42 @@ const getCanonicalProductName = (name) => {
   return base.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 };
 
+// Helper to split Net Bra combo into single colors
+const getNetBraColors = (productName) => {
+  const nameLower = productName.toLowerCase();
+  const matchedColors = [];
+
+  // Extract parts inside parentheses, if any
+  const parenMatch = nameLower.match(/\(([^)]+)\)/);
+  if (parenMatch) {
+    const content = parenMatch[1];
+    const segments = content.split(/[+\-,/]/).map(s => s.trim().replace(/[^a-z]/g, ""));
+    
+    segments.forEach((seg) => {
+      if (seg === "rubyred" || seg === "ruby") {
+        matchedColors.push("rubyred");
+      } else if (seg === "red") {
+        matchedColors.push("red");
+      } else if (seg === "black") {
+        matchedColors.push("black");
+      } else if (seg === "cream") {
+        matchedColors.push("cream");
+      } else if (seg === "darkpink" || seg === "dark") {
+        matchedColors.push("darkpink");
+      } else if (seg === "lightpink" || seg === "light") {
+        matchedColors.push("lightpink");
+      }
+    });
+  } else {
+    // Fallback for pack of 6 or other formats
+    if (nameLower.includes("pack of 6") || nameLower.includes("pack 6")) {
+      return ["black", "red", "cream", "darkpink", "lightpink", "rubyred"];
+    }
+  }
+
+  return matchedColors;
+};
+
 // Get Live Stock Summary by Product
 export const getStockSummary = async (req, res) => {
   try {
@@ -274,36 +310,23 @@ export const getStockSummary = async (req, res) => {
         const isNetBra = normKey.startsWith("netbra");
         const sizeMatch = normKey.match(/\d{2}$/);
         const chestSize = sizeMatch ? sizeMatch[0] : "";
-        const defaultKey = `netbra${chestSize}`;
 
-        if (isNetBra && chestSize && normKey === defaultKey) {
-          // Net Bra order without color (e.g. Pack of 6). Deduct in units of 3-packs
-          const totalPcs = soldQty * packMultiplier;
-          const numberOfPacks = Math.ceil(totalPcs / 3);
-
-          for (let p = 0; p < numberOfPacks; p++) {
-            // Find all matching color keys in stockMap for this chestSize
-            const colorKeys = Object.keys(stockMap).filter(
-              k => k.startsWith("netbra") && k.endsWith(chestSize) && k !== defaultKey
-            );
-
-            let bestKey = "";
-            let maxAvailable = -Infinity;
-
-            colorKeys.forEach((k) => {
-              const available = stockMap[k].totalPurchasedPcs - stockMap[k].totalSoldPcs;
-              if (available > maxAvailable) {
-                maxAvailable = available;
-                bestKey = k;
-              }
+        if (isNetBra && chestSize) {
+          const colors = getNetBraColors(fullPName);
+          if (colors.length > 0) {
+            colors.forEach((color) => {
+              const singleKey = `netbra${color}${chestSize}`;
+              const colorDisplay = color.charAt(0).toUpperCase() + color.slice(1);
+              const displayName = `Net Bra ${colorDisplay} ${chestSize}`;
+              
+              ensureStockEntry(singleKey, displayName);
+              stockMap[singleKey].totalSoldPcs += soldQty;
             });
-
-            if (bestKey) {
-              stockMap[bestKey].totalSoldPcs += 3;
-            } else {
-              ensureStockEntry(defaultKey, `Net Bra ${chestSize}`);
-              stockMap[defaultKey].totalSoldPcs += 3;
-            }
+          } else {
+            // Standard deduction fallback
+            ensureStockEntry(normKey, canonicalName);
+            const actualPcsSold = soldQty * packMultiplier;
+            stockMap[normKey].totalSoldPcs += actualPcsSold;
           }
         } else {
           // Standard deduction

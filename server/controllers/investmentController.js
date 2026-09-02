@@ -225,12 +225,22 @@ const getCanonicalProductName = (name) => {
   return base.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 };
 
+const ALL_NET_BRA_COLORS = ["black", "red", "cream", "darkpink", "lightpink", "rubyred"];
+
+const getColorDisplayName = (color) => {
+  if (color === "darkpink") return "Darkpink";
+  if (color === "lightpink") return "Lightpink";
+  if (color === "rubyred") return "Ruby Red";
+  return color.charAt(0).toUpperCase() + color.slice(1);
+};
+
 // Helper to split Net Bra combo into single colors
 const getNetBraColors = (productName) => {
+  if (!productName) return ALL_NET_BRA_COLORS;
   const nameLower = productName.toLowerCase();
   const matchedColors = [];
 
-  // Extract parts inside parentheses, if any
+  // 1. Extract parts inside parentheses, if any (e.g. "Net Bra (Ruby Red-DarkPink-Red) Pack of 3")
   const parenMatch = nameLower.match(/\(([^)]+)\)/);
   if (parenMatch) {
     const content = parenMatch[1];
@@ -251,14 +261,35 @@ const getNetBraColors = (productName) => {
         matchedColors.push("lightpink");
       }
     });
-  } else {
-    // Fallback for pack of 6 or other formats
-    if (nameLower.includes("pack of 6") || nameLower.includes("pack 6")) {
-      return ["black", "red", "cream", "darkpink", "lightpink", "rubyred"];
+
+    if (matchedColors.length > 0) {
+      return matchedColors;
     }
   }
 
-  return matchedColors;
+  // 2. Check if a single or specific color is explicitly in the product name
+  const isRubyRed = nameLower.includes("ruby red") || nameLower.includes("rubyred") || nameLower.includes("ruby");
+  const isDarkPink = nameLower.includes("dark pink") || nameLower.includes("darkpink");
+  const isLightPink = nameLower.includes("light pink") || nameLower.includes("lightpink");
+  const isBlack = nameLower.includes("black");
+  const isCream = nameLower.includes("cream");
+  const isPlainRed = !isRubyRed && (nameLower.includes(" red") || nameLower.includes("red ") || nameLower.endsWith("red") || nameLower.includes("-red") || nameLower.includes("+red"));
+
+  const detectedColors = [];
+  if (isRubyRed) detectedColors.push("rubyred");
+  if (isDarkPink) detectedColors.push("darkpink");
+  if (isLightPink) detectedColors.push("lightpink");
+  if (isBlack) detectedColors.push("black");
+  if (isCream) detectedColors.push("cream");
+  if (isPlainRed) detectedColors.push("red");
+
+  if (detectedColors.length > 0) {
+    return detectedColors;
+  }
+
+  // 3. If no specific colors are mentioned (e.g. "Net Bra 28", "Net Bra 28A", "Net Bra Pack of 6 28", "Net Bra 30", etc.)
+  // Then it is a set of all 6 colors (Black, Red, Cream, Darkpink, Lightpink, Ruby Red)
+  return ALL_NET_BRA_COLORS;
 };
 
 // Get Live Stock Summary by Product
@@ -320,7 +351,7 @@ export const getStockSummary = async (req, res) => {
       if (!normKey) return;
 
       const soldQty = Number(ord.quantity) || 1;
-      const packMultiplier = getPackMultiplier(fullPName);
+      let packMultiplier = getPackMultiplier(fullPName);
 
       // A. Product stock deduction
       if (normKey === "shapewearblackandcream") {
@@ -333,8 +364,8 @@ export const getStockSummary = async (req, res) => {
         stockMap[blackKey].totalSoldPcs += soldQty;
         stockMap[creamKey].totalSoldPcs += soldQty;
       } else {
-        const isNetBra = normKey.startsWith("netbra");
-        const sizeMatch = normKey.match(/\d{2}$/);
+        const isNetBra = normKey.startsWith("netbra") || normKey.includes("netbra");
+        const sizeMatch = normKey.match(/\d{2}/) || fullPName.match(/\b(28|30|32|34|36|38|40)\b/i) || fullPName.match(/(28|30|32|34|36|38|40)/i);
         const chestSize = sizeMatch ? sizeMatch[0] : "";
 
         if (isNetBra && chestSize) {
@@ -342,12 +373,15 @@ export const getStockSummary = async (req, res) => {
           if (colors.length > 0) {
             colors.forEach((color) => {
               const singleKey = `netbra${color}${chestSize}`;
-              const colorDisplay = color.charAt(0).toUpperCase() + color.slice(1);
+              const colorDisplay = getColorDisplayName(color);
               const displayName = `Net Bra ${colorDisplay} ${chestSize}`;
               
               ensureStockEntry(singleKey, displayName);
               stockMap[singleKey].totalSoldPcs += soldQty;
             });
+            if (colors.length >= 6) {
+              packMultiplier = Math.max(packMultiplier, 6);
+            }
           } else {
             // Standard deduction fallback
             ensureStockEntry(normKey, canonicalName);

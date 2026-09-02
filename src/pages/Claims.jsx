@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
-import { FaFileInvoiceDollar, FaExclamationTriangle, FaCheckCircle, FaTimes, FaCalendarAlt, FaSearch, FaEdit } from "react-icons/fa";
+import { FaFileInvoiceDollar, FaExclamationTriangle, FaCheckCircle, FaTimes, FaCalendarAlt, FaSearch, FaEdit, FaStore } from "react-icons/fa";
 import { API_URL } from "../config";
 
 function Claims() {
   const [orders, setOrders] = useState([]);
+  const [shops, setShops] = useState([]);
+  const [selectedShop, setSelectedShop] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -14,7 +16,7 @@ function Claims() {
 
   // Edit Modal States
   const [editingOrder, setEditingOrder] = useState(null);
-  const [editClaimStatus, setEditClaimStatus] = useState("No Claim");
+  const [editClaimStatus, setEditClaimStatus] = useState("Pending");
   const [editClaimAmount, setEditClaimAmount] = useState("0");
   const [saving, setSaving] = useState(false);
 
@@ -31,7 +33,24 @@ function Claims() {
 
   useEffect(() => {
     fetchOrders();
+    fetchShops();
   }, []);
+
+  const fetchShops = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/shops`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setShops(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch shops:", err);
+    }
+  };
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -65,7 +84,7 @@ function Claims() {
         },
         body: JSON.stringify({
           claimStatus: editClaimStatus,
-          claimAmount: Number(editClaimAmount) || 0
+          claimAmount: editClaimStatus === "Approved" ? (Number(editClaimAmount) || 0) : 0
         })
       });
 
@@ -81,11 +100,12 @@ function Claims() {
 
   const startEdit = (o) => {
     setEditingOrder(o);
-    setEditClaimStatus(o.claimStatus || "Pending");
+    const effectiveStatus = (o.claimStatus && o.claimStatus !== "No Claim") ? o.claimStatus : "Pending";
+    setEditClaimStatus(effectiveStatus);
     setEditClaimAmount(o.claimAmount !== undefined ? String(o.claimAmount) : "0");
   };
 
-  // Global Claims Stats (calculated from all transactions)
+  // Global Claims Stats (calculated from all transactions matching shop filter)
   const claimStats = useMemo(() => {
     let totalClaims = 0;
     let pendingClaims = 0;
@@ -94,41 +114,53 @@ function Claims() {
     let approvedAmount = 0;
 
     orders.forEach((o) => {
-      if (o.claimStatus && o.claimStatus !== "No Claim") {
-        totalClaims++;
-        if (o.claimStatus === "Pending") {
-          pendingClaims++;
-        } else if (o.claimStatus === "Approved") {
-          approvedClaims++;
-          approvedAmount += o.claimAmount || 0;
-        } else if (o.claimStatus === "Rejected") {
-          rejectedClaims++;
-        }
+      const isClaim = (o.claimStatus && o.claimStatus !== "No Claim") || o.paymentStatus === "Wrong Return";
+      if (!isClaim) return;
+      if (selectedShop && (o.shopName || "HKC Collection") !== selectedShop) return;
+
+      totalClaims++;
+      const effectiveStatus = (o.claimStatus && o.claimStatus !== "No Claim") ? o.claimStatus : "Pending";
+      if (effectiveStatus === "Pending") {
+        pendingClaims++;
+      } else if (effectiveStatus === "Approved") {
+        approvedClaims++;
+        approvedAmount += o.claimAmount || 0;
+      } else if (effectiveStatus === "Rejected") {
+        rejectedClaims++;
       }
     });
 
     return { totalClaims, pendingClaims, approvedClaims, rejectedClaims, approvedAmount };
-  }, [orders]);
+  }, [orders, selectedShop]);
 
   // Unique product options for the filter dropdown
   const filterProductsList = useMemo(() => {
     const prods = new Set();
     orders.forEach(o => {
-      if (o.claimStatus && o.claimStatus !== "No Claim") {
-        prods.add(o.productName || o.productId?.productName);
+      const isClaim = (o.claimStatus && o.claimStatus !== "No Claim") || o.paymentStatus === "Wrong Return";
+      if (isClaim) {
+        if (!selectedShop || (o.shopName || "HKC Collection") === selectedShop) {
+          prods.add(o.productName || o.productId?.productName);
+        }
       }
     });
     return Array.from(prods).filter(Boolean);
-  }, [orders]);
+  }, [orders, selectedShop]);
 
   // Filtered claims list
   const filteredClaims = useMemo(() => {
     return orders.filter(o => {
-      // Must be a claim
-      if (!o.claimStatus || o.claimStatus === "No Claim") return false;
+      // Must be a wrong return or claim
+      const isClaim = (o.claimStatus && o.claimStatus !== "No Claim") || o.paymentStatus === "Wrong Return";
+      if (!isClaim) return false;
+
+      // Shop Match
+      if (selectedShop && (o.shopName || "HKC Collection") !== selectedShop) return false;
+
+      const effectiveStatus = (o.claimStatus && o.claimStatus !== "No Claim") ? o.claimStatus : "Pending";
 
       // Status Match
-      if (filterStatus && o.claimStatus !== filterStatus) return false;
+      if (filterStatus && effectiveStatus !== filterStatus) return false;
 
       // Product Match
       if (filterProduct && (o.productName || o.productId?.productName) !== filterProduct) return false;
@@ -143,20 +175,46 @@ function Claims() {
 
       return true;
     });
-  }, [orders, filterStatus, filterProduct, searchText]);
+  }, [orders, selectedShop, filterStatus, filterProduct, searchText]);
 
   return (
     <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 10px" }}>
       
       {/* Page Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
         <div>
           <h2 style={{ fontSize: "24px", fontWeight: "700", display: "flex", alignItems: "center", gap: "10px", margin: 0, color: "var(--text-primary)" }}>
             <FaFileInvoiceDollar style={{ color: "var(--primary)" }} /> Platform Claims Tracker
           </h2>
           <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "4px" }}>
-            Track details of all returns, filed wrong returns, approved claim amounts, and pending requests
+            Track details of all Wrong Returns, filed claims, approved reimbursements, and pending requests
           </p>
+        </div>
+
+        {/* Shop / Account Filter */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <FaStore style={{ color: "var(--primary)" }} />
+          <select
+            value={selectedShop}
+            onChange={(e) => setSelectedShop(e.target.value)}
+            style={{
+              padding: "8px 14px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: "600",
+              background: "var(--bg-secondary)",
+              border: "1px solid var(--border-color)",
+              color: "var(--text-primary)",
+              cursor: "pointer"
+            }}
+          >
+            <option value="">🏢 All Shops / Accounts</option>
+            {shops.map((s) => (
+              <option key={s._id} value={s.shopName}>
+                {s.shopName} ({s.platform})
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -284,10 +342,11 @@ function Claims() {
             <thead>
               <tr style={{ background: "rgba(0, 0, 0, 0.25)", borderBottom: "2px solid var(--border-color)" }}>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Date</th>
+                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Shop</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Order No.</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>AWB ID</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Product Name</th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Product Status</th>
+                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Order Status</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Claim Status</th>
                 <th style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px" }}>Claim Amount (₹)</th>
                 <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>Action</th>
@@ -296,7 +355,7 @@ function Claims() {
             <tbody>
               {filteredClaims.length === 0 ? (
                 <tr>
-                  <td colSpan="8" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
+                  <td colSpan="9" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
                     No return claims match your filter.
                   </td>
                 </tr>
@@ -308,6 +367,9 @@ function Claims() {
                     month: "short",
                     year: "numeric"
                   });
+                  const effectiveStatus = (o.claimStatus && o.claimStatus !== "No Claim") ? o.claimStatus : "Pending";
+                  const orderShop = o.shopName || "HKC Collection";
+                  const orderPlatform = o.shopPlatform || "Meesho";
 
                   return (
                     <tr 
@@ -324,6 +386,19 @@ function Claims() {
                           <FaCalendarAlt style={{ color: "var(--text-muted)" }} />
                           {formattedDate}
                         </div>
+                      </td>
+                      <td style={{ padding: "14px 16px", fontSize: "12px" }}>
+                        <span style={{
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                          backgroundColor: orderPlatform === "Flipkart" ? "rgba(40, 116, 240, 0.15)" : orderPlatform === "Amazon" ? "rgba(255, 153, 0, 0.15)" : "rgba(244, 51, 151, 0.15)",
+                          color: orderPlatform === "Flipkart" ? "#60a5fa" : orderPlatform === "Amazon" ? "#fbbf24" : "#f472b6",
+                          border: `1px solid ${orderPlatform === "Flipkart" ? "rgba(40, 116, 240, 0.3)" : orderPlatform === "Amazon" ? "rgba(255, 153, 0, 0.3)" : "rgba(244, 51, 151, 0.3)"}`
+                        }}>
+                          {orderShop}
+                        </span>
                       </td>
                       <td style={{ padding: "14px 16px", fontFamily: "monospace", fontSize: "12px", color: "var(--text-muted)" }}>
                         {o.orderNo || "-"}
@@ -343,7 +418,7 @@ function Claims() {
                           backgroundColor: o.paymentStatus === "Wrong Return" ? "rgba(239, 68, 68, 0.2)" : "rgba(139, 92, 246, 0.15)",
                           color: o.paymentStatus === "Wrong Return" ? "var(--danger)" : "#a78bfa"
                         }}>
-                          {o.paymentStatus}
+                          {o.paymentStatus || "Wrong Return"}
                         </span>
                       </td>
                       <td style={{ padding: "14px 16px", fontSize: "13px" }}>
@@ -353,18 +428,18 @@ function Claims() {
                           fontSize: "11px",
                           fontWeight: "700",
                           backgroundColor: 
-                            o.claimStatus === "Approved" ? "rgba(16, 185, 129, 0.15)" :
-                            o.claimStatus === "Pending" ? "rgba(245, 158, 11, 0.15)" :
+                            effectiveStatus === "Approved" ? "rgba(16, 185, 129, 0.15)" :
+                            effectiveStatus === "Pending" ? "rgba(245, 158, 11, 0.15)" :
                             "rgba(239, 68, 68, 0.15)",
                           color:
-                            o.claimStatus === "Approved" ? "var(--success)" :
-                            o.claimStatus === "Pending" ? "var(--warning)" :
+                            effectiveStatus === "Approved" ? "var(--success)" :
+                            effectiveStatus === "Pending" ? "var(--warning)" :
                             "var(--danger)"
                         }}>
-                          {o.claimStatus}
+                          {effectiveStatus}
                         </span>
                       </td>
-                      <td style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px", fontWeight: "600", color: o.claimStatus === "Approved" ? "var(--success)" : "var(--text-secondary)" }}>
+                      <td style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px", fontWeight: "600", color: effectiveStatus === "Approved" ? "var(--success)" : "var(--text-secondary)" }}>
                         ₹{(o.claimAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
@@ -372,17 +447,21 @@ function Claims() {
                           type="button"
                           onClick={() => startEdit(o)}
                           style={{
-                            background: "none",
-                            border: "none",
+                            background: "rgba(99, 102, 241, 0.1)",
+                            border: "1px solid rgba(99, 102, 241, 0.3)",
                             color: "var(--primary)",
                             cursor: "pointer",
-                            fontSize: "14px",
-                            padding: "4px 8px",
-                            borderRadius: "4px"
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            padding: "5px 10px",
+                            borderRadius: "6px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px"
                           }}
                           title="Edit Claim"
                         >
-                          <FaEdit /> Edit
+                          <FaEdit /> Edit Claim
                         </button>
                       </td>
                     </tr>
@@ -405,6 +484,10 @@ function Claims() {
             <form onSubmit={handleEditSubmit}>
               <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "10px 0" }}>
                 <div>
+                  <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Shop: </span>
+                  <strong style={{ fontSize: "13px", color: "var(--text-primary)" }}>{editingOrder.shopName || "HKC Collection"}</strong>
+                </div>
+                <div>
                   <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Order No: </span>
                   <strong style={{ fontSize: "13px", color: "var(--text-primary)" }}>{editingOrder.orderNo || "-"}</strong>
                 </div>
@@ -424,7 +507,7 @@ function Claims() {
 
                 {editClaimStatus === "Approved" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)" }}>Claim Reimbursement (₹)</label>
+                    <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)" }}>Claim Reimbursement Received (₹)</label>
                     <input 
                       type="number" 
                       value={editClaimAmount} 

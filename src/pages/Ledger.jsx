@@ -694,6 +694,11 @@ function Ledger() {
       const selectedShopObj = shops.find(s => s.shopName === editShopName);
       const chosenPlatform = selectedShopObj ? selectedShopObj.platform : editShopPlatform;
 
+      let finalClaimStatus = editClaimStatus;
+      if (editPaymentStatus === "Wrong Return" && (!editClaimStatus || editClaimStatus === "No Claim")) {
+        finalClaimStatus = "Pending";
+      }
+
       const payload = {
         shopName: editShopName || "HKC Collection",
         shopPlatform: chosenPlatform,
@@ -709,7 +714,7 @@ function Ledger() {
         courierPartner: editCourierPartner,
         paymentStatus: editPaymentStatus,
         dispatchStatus: editDispatchStatus,
-        claimStatus: editClaimStatus,
+        claimStatus: finalClaimStatus,
         claimAmount: Number(editClaimAmount) || 0,
         date: new Date(editDate).toISOString()
       };
@@ -997,13 +1002,19 @@ function Ledger() {
 
   const handleStatusChange = async (id, newStatus) => {
     try {
+      const orderToUpdate = orders.find(o => o._id === id);
+      const updatePayload = { paymentStatus: newStatus };
+      if (newStatus === "Wrong Return" && (!orderToUpdate?.claimStatus || orderToUpdate?.claimStatus === "No Claim")) {
+        updatePayload.claimStatus = "Pending";
+      }
+
       const res = await fetch(`${API_URL}/api/orders/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`
         },
-        body: JSON.stringify({ paymentStatus: newStatus })
+        body: JSON.stringify(updatePayload)
       });
       if (!res.ok) throw new Error("Failed to update status");
 

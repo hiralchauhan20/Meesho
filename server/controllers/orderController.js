@@ -33,6 +33,10 @@ export const addOrder = async (req, res) => {
       shopPlatform: req.body.shopPlatform || "Meesho"
     };
 
+    if (orderData.paymentStatus === "Wrong Return" && (!orderData.claimStatus || orderData.claimStatus === "No Claim")) {
+      orderData.claimStatus = "Pending";
+    }
+
     if (orderData.paymentStatus && orderData.paymentStatus !== "Pending") {
       orderData.statusChangedAt = new Date();
       orderData.dispatchStatus = "Dispatched";
@@ -92,6 +96,15 @@ export const updateOrderStatus = async (req, res) => {
 
     // Prepare update data
     const updateData = { ...req.body };
+
+    // Automatically set claimStatus to Pending if marked as Wrong Return and claimStatus is not yet set
+    if (updateData.paymentStatus === "Wrong Return") {
+      if (!updateData.claimStatus || updateData.claimStatus === "No Claim") {
+        if (!existingOrder.claimStatus || existingOrder.claimStatus === "No Claim") {
+          updateData.claimStatus = "Pending";
+        }
+      }
+    }
 
     // Check duplicate orderNo for this user (if orderNo provided and changed)
     if (updateData.orderNo && updateData.orderNo.trim()) {

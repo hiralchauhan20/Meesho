@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
-import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice, FaSearch, FaTimes, FaExclamationTriangle, FaCheckCircle, FaBoxes } from "react-icons/fa";
+import { useSearchParams } from "react-router-dom";
+import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice, FaSearch, FaTimes, FaExclamationTriangle, FaCheckCircle, FaBoxes, FaStore, FaTag } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
 import { API_URL } from "../config";
-
+import { getPlatformStyle } from "./Shops";
 
 const INDIA_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Goa", "Gujarat",
@@ -24,17 +25,8 @@ const FILTER_PRODUCTS = [
   "Shapewear Black and Cream (Pack of 2)"
 ];
 
-const isOrderLocked = (o) => {
-  const status = o.paymentStatus || "Pending";
-  if (status !== "Pending") {
-    const lockBaseTime = o.statusChangedAt || o.updatedAt || o.date || o.createdAt;
-    if (lockBaseTime) {
-      const timeDiff = new Date() - new Date(lockBaseTime);
-      return timeDiff > 24 * 60 * 60 * 1000;
-    }
-  }
-  return false;
-};
+// No lock restriction - user can change payment status or edit/delete orders anytime
+const isOrderLocked = () => false;
 
 const calculateOrderProfit = (o) => {
   const paymentStatus = o.paymentStatus || "Pending";
@@ -73,14 +65,18 @@ const calculateOrderProfit = (o) => {
 
 
 function Ledger() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialShopParam = searchParams.get("shop") || "All";
+
   const [orders, setOrders] = useState([]);
   const [stocks, setStocks] = useState([]);
   const [products, setProducts] = useState([]);
+  const [shops, setShops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-
   // Search / Filter states
+  const [filterShop, setFilterShop] = useState(initialShopParam);
   const [filterProduct, setFilterProduct] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -88,9 +84,10 @@ function Ledger() {
   const [filterCustomerState, setFilterCustomerState] = useState("");
   const [filterOrderNo, setFilterOrderNo] = useState("");
 
-
   // Form states for fast entry
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // Default today
+  const [shopName, setShopName] = useState("HKC Collection");
+  const [shopPlatform, setShopPlatform] = useState("Meesho");
   const [orderNo, setOrderNo] = useState(""); // Order ID
   const [productId, setProductId] = useState(""); // Selected Product ID
   const [productName, setProductName] = useState("");
@@ -104,6 +101,8 @@ function Ledger() {
 
   // Edit Form States
   const [editingOrder, setEditingOrder] = useState(null);
+  const [editShopName, setEditShopName] = useState("HKC Collection");
+  const [editShopPlatform, setEditShopPlatform] = useState("Meesho");
   const [editDate, setEditDate] = useState("");
   const [editOrderNo, setEditOrderNo] = useState("");
   const [editProductId, setEditProductId] = useState("");
@@ -139,10 +138,10 @@ function Ledger() {
   // PDF Parsing states
   const [pdfParsing, setPdfParsing] = useState(false);
   const [pdfProgress, setPdfProgress] = useState("");
+  const [pdfSelectedShop, setPdfSelectedShop] = useState("HKC Collection");
   const [parsedOrders, setParsedOrders] = useState([]);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [expandedRawText, setExpandedRawText] = useState(null);
-
   // Helper matching functions for PDF Label Import
   const autoMatchProduct = (text, productsList) => {
     if (!productsList || productsList.length === 0) return null;
@@ -363,7 +362,7 @@ function Ledger() {
     // 3. Specific carrier formats: Valmo/Shadowfax (alphabetic prefix + 10-15 digits) on a line
     const valmoPattern = /(VL\d{10,15})/i;
     const generalAlphaPattern = /([a-zA-Z]{1,4}\d{9,15}[a-zA-Z]{0,4})/;
-    const orderBase = orderNo.split("_")[0];
+    const orderBase = (orderNo || "").split("_")[0];
 
     for (const line of lines) {
       const cleanLine = line.replace(/\s+/g, "");
@@ -606,10 +605,15 @@ function Ledger() {
     setPdfParsing(true);
     setPdfProgress(`Saving ${validOrders.length} orders...`);
 
+    const targetShop = shops.find(s => s.shopName === pdfSelectedShop);
+    const targetPlatform = targetShop ? targetShop.platform : "Meesho";
+
     try {
       const payload = {
         orders: validOrders.map(item => ({
           date: item.date,
+          shopName: pdfSelectedShop || "HKC Collection",
+          shopPlatform: targetPlatform,
           orderNo: item.orderNo.trim(),
           awbId: item.awbId.trim(),
           courierPartner: item.courierPartner,
@@ -656,6 +660,8 @@ function Ledger() {
 
   const startEdit = (o) => {
     setEditingOrder(o);
+    setEditShopName(o.shopName || "HKC Collection");
+    setEditShopPlatform(o.shopPlatform || "Meesho");
     setEditDate(new Date(o.date || o.createdAt).toISOString().slice(0, 10));
     setEditOrderNo(o.orderNo || "");
     setEditProductId(o.productId?._id || o.productId || "");
@@ -685,7 +691,12 @@ function Ledger() {
     setSubmitting(true);
 
     try {
+      const selectedShopObj = shops.find(s => s.shopName === editShopName);
+      const chosenPlatform = selectedShopObj ? selectedShopObj.platform : editShopPlatform;
+
       const payload = {
+        shopName: editShopName || "HKC Collection",
+        shopPlatform: chosenPlatform,
         orderNo: editOrderNo.trim(),
         awbId: editAwbId.trim(),
         customerState: editCustomerState,
@@ -762,7 +773,46 @@ function Ledger() {
     fetchOrders();
     fetchStockSummary();
     fetchProducts();
+    fetchShops();
   }, []);
+
+  const fetchShops = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/shops`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setShops(data);
+        const def = data.find(s => s.isDefault) || data[0];
+        if (def) {
+          setShopName(def.shopName);
+          setShopPlatform(def.platform || "Meesho");
+          setPdfSelectedShop(def.shopName);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch shops:", err);
+    }
+  };
+
+  const handleShopSelect = (selectedShopName) => {
+    setShopName(selectedShopName);
+    const matched = shops.find(s => s.shopName === selectedShopName);
+    if (matched) {
+      setShopPlatform(matched.platform || "Meesho");
+    }
+  };
+
+  const handleEditShopSelect = (selectedShopName) => {
+    setEditShopName(selectedShopName);
+    const matched = shops.find(s => s.shopName === selectedShopName);
+    if (matched) {
+      setEditShopPlatform(matched.platform || "Meesho");
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -857,7 +907,12 @@ function Ledger() {
     setSubmitting(true);
 
     try {
+      const selectedShopObj = shops.find(s => s.shopName === shopName);
+      const currentPlatform = selectedShopObj ? selectedShopObj.platform : shopPlatform;
+
       const payload = {
+        shopName: shopName || "HKC Collection",
+        shopPlatform: currentPlatform,
         orderNo: trimmedOrderNo,
         awbId: trimmedAwbId,
         customerState,
@@ -1033,6 +1088,11 @@ function Ledger() {
   // Filtered orders based on search inputs
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
+      // Shop filter
+      if (filterShop && filterShop !== "All") {
+        const orderShop = (o.shopName || "HKC Collection").trim().toLowerCase();
+        if (orderShop !== filterShop.trim().toLowerCase()) return false;
+      }
       // Date filter
       if (filterDate) {
         const orderDate = new Date(o.date || o.createdAt).toISOString().slice(0, 10);
@@ -1062,7 +1122,7 @@ function Ledger() {
       }
       return true;
     });
-  }, [orders, filterDate, filterStatus, filterProduct, filterCourier, filterCustomerState, filterOrderNo]);
+  }, [orders, filterShop, filterDate, filterStatus, filterProduct, filterCourier, filterCustomerState, filterOrderNo]);
 
   // Stats for filtered results
   const filteredStats = useMemo(() => {
@@ -1171,8 +1231,9 @@ function Ledger() {
     return { totalClaims, pendingClaims, approvedClaims, rejectedClaims, approvedAmount };
   }, [orders]);
 
-  const hasFilter = filterDate || filterStatus || filterProduct || filterCourier || filterCustomerState || filterOrderNo.trim();
+  const hasFilter = (filterShop && filterShop !== "All") || filterDate || filterStatus || filterProduct || filterCourier || filterCustomerState || filterOrderNo.trim();
   const clearFilters = () => {
+    setFilterShop("All");
     setFilterProduct("");
     setFilterDate("");
     setFilterStatus("");
@@ -1225,6 +1286,34 @@ function Ledger() {
           gap: "16px",
           alignItems: "flex-end"
         }}>
+          {/* Shop / Account Filter */}
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>
+              Shop / Account
+            </label>
+            <select
+              value={filterShop}
+              onChange={(e) => {
+                setFilterShop(e.target.value);
+                setSearchParams(e.target.value === "All" ? {} : { shop: e.target.value });
+              }}
+              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+            >
+              <option value="All">All Shops</option>
+              {shops.map((s) => (
+                <option key={s._id} value={s.shopName}>
+                  {s.shopName} ({s.platform})
+                </option>
+              ))}
+              {Array.from(new Set(orders.map(o => o.shopName || "HKC Collection")))
+                .filter(name => !shops.some(s => s.shopName === name))
+                .map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))
+              }
+            </select>
+          </div>
+
           {/* Order No Filter */}
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Order No. / ID</label>
@@ -1462,12 +1551,25 @@ function Ledger() {
         </h3>
         
         {/* Balanced Grid for Desktop and Tablet */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "20px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px" }}>
           
           {/* Row 1: General Details */}
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Date</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} required style={{ width: "100%" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Shop / Account</label>
+            <select value={shopName} onChange={(e) => handleShopSelect(e.target.value)} style={{ width: "100%" }}>
+              {shops.map((s) => (
+                <option key={s._id} value={s.shopName}>
+                  {s.shopName} ({s.platform})
+                </option>
+              ))}
+              {shopName && !shops.some(s => s.shopName === shopName) && (
+                <option value={shopName}>{shopName}</option>
+              )}
+            </select>
           </div>
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
@@ -1703,6 +1805,7 @@ function Ledger() {
                   <input type="checkbox" checked={isAllSelected} onChange={handleToggleSelectAll} style={{ cursor: "pointer" }} />
                 </th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Date</th>
+                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Shop / Store</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Order No.</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>AWB ID</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Product Name</th>
@@ -1721,7 +1824,7 @@ function Ledger() {
             <tbody>
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="15" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
+                  <td colSpan="16" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
                     {orders.length === 0 ? "No transactions logged in your accounts. Insert a row above to get started." : "No orders match your search/filter. Try different criteria or clear filters."}
                   </td>
                 </tr>
@@ -1735,6 +1838,7 @@ function Ledger() {
                   const orderNumber = o.orderNo || "-";
                   const stateName = o.customerState || "Gujarat";
                   const profit = calculateOrderProfit(o);
+                  const pStyle = getPlatformStyle(o.shopPlatform || "Meesho");
                   
                   const formattedDate = new Date(o.date || o.createdAt).toLocaleDateString("en-IN", {
                     day: "2-digit",
@@ -1764,6 +1868,28 @@ function Ledger() {
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                           <FaCalendarAlt style={{ color: "var(--text-muted)" }} />
                           {formattedDate}
+                        </div>
+                      </td>
+                      <td style={{ padding: "14px 16px", fontSize: "13px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                          <span style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "13px" }}>
+                            {o.shopName || "HKC Collection"}
+                          </span>
+                          <span style={{
+                            fontSize: "10px",
+                            fontWeight: "700",
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            background: pStyle.bg,
+                            color: pStyle.color,
+                            border: `1px solid ${pStyle.border}`,
+                            width: "fit-content",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "3px"
+                          }}>
+                            <FaTag style={{ fontSize: "8px" }} /> {o.shopPlatform || "Meesho"}
+                          </span>
                         </div>
                       </td>
                       <td style={{ padding: "14px 16px", fontFamily: "monospace", fontSize: "12px", color: "var(--text-muted)" }}>
@@ -1801,15 +1927,13 @@ function Ledger() {
                         <select 
                           value={o.paymentStatus || "Pending"} 
                           onChange={(e) => handleStatusChange(o._id, e.target.value)}
-                          disabled={isOrderLocked(o)}
                           style={{
                             padding: "6px 12px",
                             borderRadius: "8px",
                             fontSize: "12px",
                             fontWeight: "600",
                             border: "1px solid var(--border-color)",
-                            cursor: isOrderLocked(o) ? "not-allowed" : "pointer",
-                            opacity: isOrderLocked(o) ? 0.6 : 1,
+                            cursor: "pointer",
                             width: "125px",
                             backgroundColor: 
                               o.paymentStatus === "Complete" ? "rgba(16, 185, 129, 0.15)" :
@@ -1836,9 +1960,7 @@ function Ledger() {
                         </select>
                       </td>
 
-
-
-                      {/* Meesho Claim status and amount */}
+                      {/* Platform Claim status and amount */}
                       <td style={{ padding: "14px 16px", fontSize: "13px" }}>
                         {o.claimStatus && o.claimStatus !== "No Claim" ? (
                           <div>
@@ -1885,41 +2007,37 @@ function Ledger() {
                         <div style={{ display: "flex", justifyContent: "center", gap: "4px", alignItems: "center" }}>
                           <button 
                             type="button"
-                            onClick={() => !isOrderLocked(o) && startEdit(o)}
-                            disabled={isOrderLocked(o)}
+                            onClick={() => startEdit(o)}
                             style={{ 
                               background: "none", 
                               border: "none", 
-                              color: isOrderLocked(o) ? "var(--text-muted)" : "var(--primary)", 
-                              cursor: isOrderLocked(o) ? "not-allowed" : "pointer", 
+                              color: "var(--primary)", 
+                              cursor: "pointer", 
                               fontSize: "15px",
                               padding: "4px 8px",
                               borderRadius: "4px",
-                              transition: "all var(--transition-fast)",
-                              opacity: isOrderLocked(o) ? 0.5 : 1
+                              transition: "all var(--transition-fast)"
                             }}
-                            className={isOrderLocked(o) ? "" : "edit-btn-hover"}
-                            title={isOrderLocked(o) ? "Locked (24h after status set)" : "Edit Row"}
+                            className="edit-btn-hover"
+                            title="Edit Row"
                           >
                             <FaEdit />
                           </button>
                           <button 
                             type="button"
-                            onClick={() => !isOrderLocked(o) && handleDeleteRow(o._id)} 
-                            disabled={isOrderLocked(o)}
+                            onClick={() => handleDeleteRow(o._id)} 
                             style={{ 
                               background: "none", 
                               border: "none", 
-                              color: isOrderLocked(o) ? "var(--text-muted)" : "rgba(239, 68, 68, 0.7)", 
-                              cursor: isOrderLocked(o) ? "not-allowed" : "pointer", 
+                              color: "rgba(239, 68, 68, 0.7)", 
+                              cursor: "pointer", 
                               fontSize: "15px",
                               padding: "4px 8px",
                               borderRadius: "4px",
-                              transition: "all var(--transition-fast)",
-                              opacity: isOrderLocked(o) ? 0.5 : 1
+                              transition: "all var(--transition-fast)"
                             }}
-                            className={isOrderLocked(o) ? "" : "delete-btn-hover"}
-                            title={isOrderLocked(o) ? "Locked (24h after status set)" : "Delete Row"}
+                            className="delete-btn-hover"
+                            title="Delete Row"
                           >
                             <FaTrash />
                           </button>
@@ -1939,7 +2057,7 @@ function Ledger() {
                     borderBottom: "2px solid var(--primary)" 
                   }}
                 >
-                  <td colSpan="6" style={{ padding: "16px", textTransform: "uppercase", fontSize: "12px", color: "var(--primary)", trackingSpacing: "1px" }}>
+                  <td colSpan="7" style={{ padding: "16px", textTransform: "uppercase", fontSize: "12px", color: "var(--primary)", trackingSpacing: "1px" }}>
                     <FaFileInvoice /> Accounts Totals
                   </td>
                   <td style={{ padding: "16px", textAlign: "right", fontSize: "13px", color: "var(--text-primary)" }}>
@@ -1985,6 +2103,19 @@ function Ledger() {
                 <div>
                   <label>Date</label>
                   <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} required />
+                </div>
+                <div>
+                  <label>Shop / Account</label>
+                  <select value={editShopName} onChange={(e) => handleEditShopSelect(e.target.value)}>
+                    {shops.map((s) => (
+                      <option key={s._id} value={s.shopName}>
+                        {s.shopName} ({s.platform})
+                      </option>
+                    ))}
+                    {editShopName && !shops.some(s => s.shopName === editShopName) && (
+                      <option value={editShopName}>{editShopName}</option>
+                    )}
+                  </select>
                 </div>
                 <div>
                   <label>Order No. / ID</label>
@@ -2144,6 +2275,47 @@ function Ledger() {
               >
                 <FaTimes />
               </button>
+            </div>
+
+            {/* Shop Batch Assignment Toolbar */}
+            <div style={{
+              padding: "12px 20px",
+              background: "rgba(99, 102, 241, 0.08)",
+              borderBottom: "1px solid var(--border-color)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "12px"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <FaStore style={{ color: "var(--primary)" }} />
+                <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>
+                  Assign this Batch to Shop:
+                </span>
+                <select
+                  value={pdfSelectedShop}
+                  onChange={(e) => setPdfSelectedShop(e.target.value)}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    background: "var(--bg-primary)",
+                    border: "1px solid var(--border-color)",
+                    color: "var(--text-primary)"
+                  }}
+                >
+                  {shops.map(s => (
+                    <option key={s._id} value={s.shopName}>
+                      {s.shopName} ({s.platform})
+                    </option>
+                  ))}
+                  {pdfSelectedShop && !shops.some(s => s.shopName === pdfSelectedShop) && (
+                    <option value={pdfSelectedShop}>{pdfSelectedShop}</option>
+                  )}
+                </select>
+              </div>
             </div>
 
             {/* Scrollable Content */}

@@ -11,6 +11,7 @@ import Investment from "./pages/Investment";
 import MeeshoAds from "./pages/MeeshoAds";
 import Claims from "./pages/Claims";
 import Products from "./pages/Products";
+import Shops from "./pages/Shops";
 
 import "./App.css";
 
@@ -88,6 +89,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Reports />} />
             <Route path="/accounts" element={<Ledger />} />
+            <Route path="/shops" element={<Shops />} />
             <Route path="/investments" element={<Investment />} />
             <Route path="/ads" element={<MeeshoAds />} />
             <Route path="/claims" element={<Claims />} />

@@ -13,6 +13,22 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
+    shopName: {
+      type: String,
+      default: "HKC Collection",
+    },
+
+    shopPlatform: {
+      type: String,
+      default: "Meesho",
+    },
+
+    shopId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Shop",
+      required: false,
+    },
+
     orderNo: {
       type: String,
       default: "", // Meesho Order ID

@@ -1,5 +1,10 @@
 import React from "react";
-import { FaExclamationTriangle } from "react-icons/fa";
+import { 
+  FaExclamationTriangle, 
+  FaCheckCircle, 
+  FaInfoCircle, 
+  FaTimesCircle 
+} from "react-icons/fa";
 
 function ConfirmModal({ 
   isOpen, 
@@ -9,10 +14,66 @@ function ConfirmModal({
   onCancel, 
   confirmText = "OK", 
   cancelText = "Cancel", 
-  type = "danger", 
+  type, 
   isAlert = false 
 }) {
   if (!isOpen) return null;
+
+  // Resolve type automatically if not explicitly given or for alerts
+  const lowerTitle = (title || "").toLowerCase();
+  let resolvedType = type;
+  if (!resolvedType) {
+    if (lowerTitle.includes("success")) resolvedType = "success";
+    else if (lowerTitle.includes("error") || lowerTitle.includes("delete") || lowerTitle.includes("remove")) resolvedType = "danger";
+    else if (lowerTitle.includes("warning") || lowerTitle.includes("validation") || lowerTitle.includes("alert")) resolvedType = "warning";
+    else resolvedType = "info";
+  } else if (isAlert && type === "danger" && lowerTitle.includes("success")) {
+    resolvedType = "success";
+  } else if (lowerTitle.includes("success")) {
+    resolvedType = "success";
+  }
+
+  // Get style config based on resolvedType
+  const getModalStyle = () => {
+    switch (resolvedType) {
+      case "success":
+        return {
+          icon: <FaCheckCircle />,
+          iconBg: "rgba(16, 185, 129, 0.15)",
+          iconColor: "#10b981",
+          btnBg: "#10b981",
+          btnShadow: "0 4px 12px rgba(16, 185, 129, 0.3)"
+        };
+      case "warning":
+        return {
+          icon: <FaExclamationTriangle />,
+          iconBg: "rgba(245, 158, 11, 0.15)",
+          iconColor: "#f59e0b",
+          btnBg: "#f59e0b",
+          btnShadow: "0 4px 12px rgba(245, 158, 11, 0.3)"
+        };
+      case "danger":
+      case "error":
+        return {
+          icon: <FaTimesCircle />,
+          iconBg: "rgba(239, 68, 68, 0.15)",
+          iconColor: "#ef4444",
+          btnBg: "#ef4444",
+          btnShadow: "0 4px 12px rgba(239, 68, 68, 0.3)"
+        };
+      case "info":
+      default:
+        return {
+          icon: <FaInfoCircle />,
+          iconBg: "rgba(99, 102, 241, 0.15)",
+          iconColor: "var(--primary)",
+          btnBg: "var(--primary)",
+          btnShadow: "0 4px 12px rgba(99, 102, 241, 0.3)"
+        };
+    }
+  };
+
+  const styleConfig = getModalStyle();
 
   return (
     <div style={{
@@ -43,14 +104,14 @@ function ConfirmModal({
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
           <div style={{
-            background: type === "danger" ? "rgba(239, 68, 68, 0.15)" : "rgba(99, 102, 241, 0.15)",
-            color: type === "danger" ? "#ef4444" : "var(--primary)",
+            background: styleConfig.iconBg,
+            color: styleConfig.iconColor,
             padding: "10px",
             borderRadius: "10px",
             display: "flex",
             fontSize: "20px"
           }}>
-            <FaExclamationTriangle />
+            {styleConfig.icon}
           </div>
           <h4 style={{ fontSize: "16px", fontWeight: "700", margin: 0 }}>{title}</h4>
         </div>
@@ -92,10 +153,10 @@ function ConfirmModal({
               fontSize: "13px",
               fontWeight: "600",
               border: "none",
-              background: type === "danger" ? "#ef4444" : "var(--primary)",
+              background: styleConfig.btnBg,
               color: "#ffffff",
               cursor: "pointer",
-              boxShadow: type === "danger" ? "0 4px 12px rgba(239, 68, 68, 0.25)" : "0 4px 12px rgba(99, 102, 241, 0.25)",
+              boxShadow: styleConfig.btnShadow,
               transition: "all 0.2s"
             }}
             onMouseOver={(e) => e.target.style.opacity = "0.9"}

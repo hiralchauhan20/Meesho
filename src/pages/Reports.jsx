@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { FaPlus, FaTrash, FaEdit, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen, FaExclamationTriangle, FaBoxes, FaCheckCircle, FaTruck, FaTimes } from "react-icons/fa";
+import { FaPlus, FaTrash, FaEdit, FaDownload, FaCoins, FaWallet, FaFileInvoiceDollar, FaChartLine, FaBoxOpen, FaExclamationTriangle, FaBoxes, FaCheckCircle, FaTruck, FaTimes, FaCheck } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
 import { API_URL } from "../config";
 
@@ -43,6 +43,8 @@ function Reports() {
   const [orders, setOrders] = useState([]);
   const [stocks, setStocks] = useState([]);
   const [investments, setInvestments] = useState([]);
+  const [shops, setShops] = useState([]);
+  const [selectedShop, setSelectedShop] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -125,6 +127,13 @@ function Reports() {
       if (stockRes.ok) {
         const stockData = await stockRes.json();
         setStocks(stockData);
+      }
+
+      // Fetch shops
+      const shopsRes = await fetch(`${API_URL}/api/shops`, { headers });
+      if (shopsRes.ok) {
+        const shopsData = await shopsRes.json();
+        setShops(shopsData);
       }
     } catch (err) {
       setError(err.message);
@@ -239,12 +248,18 @@ function Reports() {
     }
   };
 
+  // Relevant orders filtered by selected shop
+  const relevantOrders = useMemo(() => {
+    if (!selectedShop || selectedShop === "All") return orders;
+    return orders.filter(o => (o.shopName || "HKC Collection").trim().toLowerCase() === selectedShop.trim().toLowerCase());
+  }, [orders, selectedShop]);
+
   // Group transactions (Orders) and Expenses by Month
   const getMonthlyBreakdown = () => {
     const monthlyData = {};
 
     // 1. Process ledger orders
-    orders.forEach((o) => {
+    relevantOrders.forEach((o) => {
       const dateObj = new Date(o.date || o.createdAt);
       const monthKey = dateObj.toLocaleString("en-US", { month: "long", year: "numeric" }); // e.g., "July 2026"
       
@@ -413,7 +428,7 @@ function Reports() {
     let rejectedClaims = 0;
     let approvedAmount = 0;
 
-    orders.forEach((o) => {
+    relevantOrders.forEach((o) => {
       const d = new Date(o.date || o.createdAt);
       if (d.getFullYear() !== selectedYear) return;
       if (selectedMonth !== "All" && d.getMonth() !== Number(selectedMonth)) return;
@@ -432,7 +447,7 @@ function Reports() {
     });
 
     return { totalClaims, pendingClaims, approvedClaims, rejectedClaims, approvedAmount };
-  }, [orders, selectedYear, selectedMonth]);
+  }, [relevantOrders, selectedYear, selectedMonth]);
 
   const activeAlerts = useMemo(() => {
     let ignoredMap = {};
@@ -466,6 +481,20 @@ function Reports() {
     setIgnoreTrigger(prev => prev + 1);
   };
 
+  const handleIgnoreAllAlerts = () => {
+    let ignoredMap = {};
+    try {
+      ignoredMap = JSON.parse(localStorage.getItem("ignoredLowStock") || "{}");
+    } catch (e) {
+      ignoredMap = {};
+    }
+    activeAlerts.forEach(s => {
+      ignoredMap[s.productName] = { remainingPcs: s.remainingPcs, totalSoldPcs: s.totalSoldPcs };
+    });
+    localStorage.setItem("ignoredLowStock", JSON.stringify(ignoredMap));
+    setIgnoreTrigger(prev => prev + 1);
+  };
+
   // ── Yearly chart data ──────────────────────────────────────────
   const getAvailableYears = () => {
     const years = new Set();
@@ -495,7 +524,7 @@ function Reports() {
       rtoReturns: 0
     }));
 
-    orders.forEach((o) => {
+    relevantOrders.forEach((o) => {
       const d = new Date(o.date || o.createdAt);
       if (d.getFullYear() === selectedYear) {
         const mIdx = d.getMonth();
@@ -585,7 +614,7 @@ function Reports() {
       rtoReturns: 0
     }));
 
-    orders.forEach((o) => {
+    relevantOrders.forEach((o) => {
       const d = new Date(o.date || o.createdAt);
       if (d.getFullYear() === selectedYear && d.getMonth() === trendMonth) {
         const dayIdx = d.getDate() - 1;
@@ -838,60 +867,123 @@ function Reports() {
           backdropFilter: "blur(12px)",
           borderRadius: "12px",
           border: "1px solid var(--border-color)",
-          padding: "16px 20px",
+          padding: "20px",
           marginBottom: "20px",
-          boxShadow: "var(--glass-shadow)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: "12px"
+          boxShadow: "var(--glass-shadow)"
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: "280px" }}>
-            <div style={{
-              background: activeAlerts.some(s => s.status === "OUT_OF_STOCK") ? "rgba(239, 68, 68, 0.15)" : "rgba(245, 158, 11, 0.15)",
-              color: activeAlerts.some(s => s.status === "OUT_OF_STOCK") ? "var(--danger)" : "#d97706",
-              padding: "10px",
-              borderRadius: "10px",
-              display: "flex"
-            }}>
-              <FaExclamationTriangle style={{ fontSize: "20px" }} />
+          {/* Header Row */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "12px",
+            marginBottom: "14px",
+            paddingBottom: "12px",
+            borderBottom: "1px solid var(--border-color)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{
+                background: activeAlerts.some(s => s.status === "OUT_OF_STOCK") ? "rgba(239, 68, 68, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                color: activeAlerts.some(s => s.status === "OUT_OF_STOCK") ? "var(--danger)" : "#d97706",
+                padding: "8px",
+                borderRadius: "8px",
+                display: "flex",
+                fontSize: "18px"
+              }}>
+                <FaExclamationTriangle />
+              </div>
+              <div>
+                <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
+                  Inventory Re-Stock Alerts ({activeAlerts.length})
+                </div>
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Some products are low on stock or out of stock in your inventory
+                </div>
+              </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)" }}>
-                Inventory Re-Stock Alert
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "6px" }}>
-                {activeAlerts.map(s => (
-                  <div key={s.productName} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.02)", padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
-                    <span style={{ fontSize: "12px", color: "var(--text-primary)" }}>
-                      <strong>{s.productName}</strong>: <span style={{ color: s.status === "OUT_OF_STOCK" ? "var(--danger)" : "#f59e0b", fontWeight: "600" }}>{s.status === "OUT_OF_STOCK" ? "Out of Stock" : `Low Stock (${s.remainingPcs} pcs left)`}</span>
-                    </span>
-                    <button 
-                      onClick={() => handleIgnoreProduct(s.productName, s.remainingPcs, s.totalSoldPcs)}
-                      style={{
-                        background: "rgba(255, 255, 255, 0.05)",
-                        border: "1px solid var(--border-color)",
-                        color: "var(--text-secondary)",
-                        padding: "3px 8px",
-                        borderRadius: "4px",
-                        fontSize: "11px",
-                        cursor: "pointer",
-                        fontWeight: "600"
-                      }}
-                      onMouseEnter={(e) => e.target.style.background = "rgba(255,255,255,0.1)"}
-                      onMouseLeave={(e) => e.target.style.background = "rgba(255,255,255,0.05)"}
-                    >
-                      Ignore Alert
-                    </button>
-                  </div>
-                ))}
-              </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={handleIgnoreAllAlerts}
+                style={{
+                  background: "rgba(255, 255, 255, 0.08)",
+                  border: "1px solid var(--border-color)",
+                  color: "var(--text-primary)",
+                  padding: "7px 14px",
+                  borderRadius: "6px",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  transition: "all var(--transition-fast)"
+                }}
+                onMouseEnter={(e) => e.target.style.background = "rgba(255, 255, 255, 0.15)"}
+                onMouseLeave={(e) => e.target.style.background = "rgba(255, 255, 255, 0.08)"}
+              >
+                <FaCheck style={{ color: "var(--success)" }} /> Ignore All ({activeAlerts.length})
+              </button>
+              <a 
+                href="/investments" 
+                className="btn btn-secondary" 
+                style={{ fontSize: "12px", height: "34px", padding: "0 14px", display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                <FaBoxes /> Manage Stock
+              </a>
             </div>
           </div>
-          <a href="/investments" className="btn btn-secondary" style={{ fontSize: "12px", height: "34px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-            <FaBoxes /> Manage Investments & Stock
-          </a>
+
+          {/* Scrollable list with max height */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+            gap: "8px",
+            maxHeight: "260px",
+            overflowY: "auto",
+            paddingRight: "4px"
+          }}>
+            {activeAlerts.map(s => (
+              <div 
+                key={s.productName} 
+                style={{ 
+                  display: "flex", 
+                  alignItems: "center", 
+                  justifyContent: "space-between", 
+                  background: "rgba(255,255,255,0.02)", 
+                  padding: "8px 12px", 
+                  borderRadius: "8px", 
+                  border: "1px solid var(--border-color)" 
+                }}
+              >
+                <span style={{ fontSize: "12px", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: "10px" }} title={s.productName}>
+                  <strong>{s.productName}</strong>: <span style={{ color: s.status === "OUT_OF_STOCK" ? "var(--danger)" : "#f59e0b", fontWeight: "600" }}>
+                    {s.status === "OUT_OF_STOCK" ? "Out of Stock" : `Low Stock (${s.remainingPcs} pcs)`}
+                  </span>
+                </span>
+                <button 
+                  onClick={() => handleIgnoreProduct(s.productName, s.remainingPcs, s.totalSoldPcs)}
+                  style={{
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid var(--border-color)",
+                    color: "var(--text-secondary)",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    fontSize: "11px",
+                    cursor: "pointer",
+                    fontWeight: "600",
+                    whiteSpace: "nowrap"
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = "rgba(255,255,255,0.1)"}
+                  onMouseLeave={(e) => e.target.style.background = "rgba(255,255,255,0.05)"}
+                >
+                  Ignore
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -999,7 +1091,19 @@ function Reports() {
               Detailed interactive monthly trends for {selectedYear}
             </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <select
+              value={selectedShop}
+              onChange={(e) => setSelectedShop(e.target.value)}
+              style={{ height: "36px", padding: "0 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", width: "auto" }}
+            >
+              <option value="All">All Shops</option>
+              {shops.map((s) => (
+                <option key={s._id} value={s.shopName}>
+                  {s.shopName} ({s.platform})
+                </option>
+              ))}
+            </select>
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(Number(e.target.value))}

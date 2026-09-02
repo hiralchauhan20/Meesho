@@ -26,7 +26,13 @@ export const addOrder = async (req, res) => {
       }
     }
 
-    const orderData = { ...req.body, userId };
+    const orderData = { 
+      ...req.body, 
+      userId,
+      shopName: req.body.shopName || "HKC Collection",
+      shopPlatform: req.body.shopPlatform || "Meesho"
+    };
+
     if (orderData.paymentStatus && orderData.paymentStatus !== "Pending") {
       orderData.statusChangedAt = new Date();
       orderData.dispatchStatus = "Dispatched";
@@ -47,9 +53,24 @@ export const addOrder = async (req, res) => {
 // Get All Orders
 export const getOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ userId: req.user.id }).populate("productId");
+    const query = { userId: req.user.id };
+    if (req.query.shopName && req.query.shopName !== "All") {
+      query.shopName = req.query.shopName;
+    }
 
-    res.status(200).json(orders);
+    const orders = await Order.find(query).populate("productId");
+
+    // Ensure shopName defaults to "HKC Collection" if null/undefined in legacy data
+    const sanitizedOrders = orders.map(o => {
+      const obj = o.toObject();
+      if (!obj.shopName) {
+        obj.shopName = "HKC Collection";
+        obj.shopPlatform = "Meesho";
+      }
+      return obj;
+    });
+
+    res.status(200).json(sanitizedOrders);
   } catch (error) {
     res.status(500).json({
       message: error.message,
@@ -57,7 +78,7 @@ export const getOrders = async (req, res) => {
   }
 };
 
-// Update Order Status
+// Update Order Status / Details (No 24-hour lock restriction - can be edited anytime)
 export const updateOrderStatus = async (req, res) => {
   try {
     const orderId = req.params.id;
@@ -67,17 +88,6 @@ export const updateOrderStatus = async (req, res) => {
     const existingOrder = await Order.findOne({ _id: orderId, userId });
     if (!existingOrder) {
       return res.status(404).json({ message: "Order not found" });
-    }
-
-    // Check if the order is locked (non-Pending status set more than 24 hours ago)
-    const isCurrentlyLockedStatus = existingOrder.paymentStatus && existingOrder.paymentStatus !== "Pending";
-    if (isCurrentlyLockedStatus) {
-      const lockBaseTime = existingOrder.statusChangedAt || existingOrder.updatedAt || existingOrder.createdAt;
-      if (lockBaseTime && (new Date() - new Date(lockBaseTime)) > 24 * 60 * 60 * 1000) {
-        return res.status(400).json({
-          message: "This order is locked and cannot be modified after 24 hours of setting its status."
-        });
-      }
     }
 
     // Prepare update data
@@ -138,7 +148,7 @@ export const updateOrderStatus = async (req, res) => {
   }
 };
 
-// Delete Order
+// Delete Order (No 24-hour lock restriction - can be deleted anytime)
 export const deleteOrder = async (req, res) => {
   try {
     const orderId = req.params.id;
@@ -147,17 +157,6 @@ export const deleteOrder = async (req, res) => {
     const existingOrder = await Order.findOne({ _id: orderId, userId });
     if (!existingOrder) {
       return res.status(404).json({ message: "Order not found" });
-    }
-
-    // Check if the order is locked (non-Pending status set more than 24 hours ago)
-    const isCurrentlyLockedStatus = existingOrder.paymentStatus && existingOrder.paymentStatus !== "Pending";
-    if (isCurrentlyLockedStatus) {
-      const lockBaseTime = existingOrder.statusChangedAt || existingOrder.updatedAt || existingOrder.createdAt;
-      if (lockBaseTime && (new Date() - new Date(lockBaseTime)) > 24 * 60 * 60 * 1000) {
-        return res.status(400).json({
-          message: "This order is locked and cannot be deleted after 24 hours of setting its status."
-        });
-      }
     }
 
     await Order.findOneAndDelete({ _id: orderId, userId });
@@ -214,7 +213,13 @@ export const bulkAddOrders = async (req, res) => {
           }
         }
 
-        const finalOrderData = { ...orderData, userId };
+        const finalOrderData = { 
+          ...orderData, 
+          userId,
+          shopName: orderData.shopName || "HKC Collection",
+          shopPlatform: orderData.shopPlatform || "Meesho"
+        };
+
         if (finalOrderData.paymentStatus && finalOrderData.paymentStatus !== "Pending") {
           finalOrderData.statusChangedAt = new Date();
           finalOrderData.dispatchStatus = "Dispatched";
@@ -240,7 +245,7 @@ export const bulkAddOrders = async (req, res) => {
   }
 };
 
-// Bulk Delete Orders
+// Bulk Delete Orders (No 24-hour lock restriction - can delete anytime)
 export const bulkDeleteOrders = async (req, res) => {
   try {
     const { ids } = req.body;
@@ -250,39 +255,11 @@ export const bulkDeleteOrders = async (req, res) => {
       return res.status(400).json({ message: "No order IDs provided" });
     }
 
-    const selectedOrders = await Order.find({ _id: { $in: ids }, userId });
-
-    const deletableIds = [];
-    const lockedIds = [];
-
-    selectedOrders.forEach((o) => {
-      const isCurrentlyLockedStatus = o.paymentStatus && o.paymentStatus !== "Pending";
-      let isLocked = false;
-      if (isCurrentlyLockedStatus) {
-        const lockBaseTime = o.statusChangedAt || o.updatedAt || o.createdAt;
-        if (lockBaseTime && (new Date() - new Date(lockBaseTime)) > 24 * 60 * 60 * 1000) {
-          isLocked = true;
-        }
-      }
-      if (isLocked) {
-        lockedIds.push(o._id);
-      } else {
-        deletableIds.push(o._id);
-      }
-    });
-
-    if (deletableIds.length === 0) {
-      return res.status(400).json({
-        message: "All selected orders are locked and cannot be deleted after 24 hours of status change."
-      });
-    }
-
-    await Order.deleteMany({ _id: { $in: deletableIds }, userId });
+    const result = await Order.deleteMany({ _id: { $in: ids }, userId });
 
     res.status(200).json({
-      message: `Successfully deleted ${deletableIds.length} orders.${lockedIds.length > 0 ? ` Skipped ${lockedIds.length} locked orders.` : ""}`,
-      deletedCount: deletableIds.length,
-      skippedCount: lockedIds.length
+      message: `Successfully deleted ${result.deletedCount} orders.`,
+      deletedCount: result.deletedCount
     });
   } catch (error) {
     res.status(500).json({
@@ -290,4 +267,3 @@ export const bulkDeleteOrders = async (req, res) => {
     });
   }
 };
-

@@ -2104,13 +2104,31 @@ function Ledger() {
       {/* Edit Sale Transaction Modal */}
       {editingOrder && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: "600px" }}>
-            <div className="modal-header">
+          <div 
+            className="modal-content" 
+            style={{ 
+              maxWidth: "650px", 
+              maxHeight: "90vh", 
+              padding: 0, 
+              display: "flex", 
+              flexDirection: "column", 
+              overflow: "hidden" 
+            }}
+          >
+            <div className="modal-header" style={{ padding: "18px 24px", margin: 0, borderBottom: "1px solid var(--border-color)" }}>
               <h3 className="modal-title">Edit Sale Transaction</h3>
               <button className="modal-close" onClick={() => setEditingOrder(null)}>&times;</button>
             </div>
-            <form onSubmit={handleEditSubmit}>
-              <div className="form-grid">
+            <form onSubmit={handleEditSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+              <div 
+                className="form-grid" 
+                style={{ 
+                  padding: "20px 24px", 
+                  overflowY: "auto", 
+                  flex: 1, 
+                  maxHeight: "calc(90vh - 140px)" 
+                }}
+              >
                 <div>
                   <label>Date</label>
                   <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} required />
@@ -2233,7 +2251,7 @@ function Ledger() {
                   </div>
                 )}
               </div>
-              <div className="modal-footer">
+              <div className="modal-footer" style={{ padding: "16px 24px", margin: 0, borderTop: "1px solid var(--border-color)", background: "rgba(0,0,0,0.1)" }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setEditingOrder(null)}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? "Saving..." : "Save Changes"}</button>
               </div>

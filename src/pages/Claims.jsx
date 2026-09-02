@@ -98,6 +98,33 @@ function Claims() {
     }
   };
 
+  const handleInlineClaimStatusChange = async (o, newStatus) => {
+    if (newStatus === "Approved") {
+      setEditingOrder(o);
+      setEditClaimStatus("Approved");
+      setEditClaimAmount(o.claimAmount !== undefined && o.claimAmount > 0 ? String(o.claimAmount) : "");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${o._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({
+          claimStatus: newStatus,
+          claimAmount: 0
+        })
+      });
+      if (!res.ok) throw new Error("Failed to update claim status");
+      fetchOrders();
+    } catch (err) {
+      showAlert(err.message, "Error");
+    }
+  };
+
   const startEdit = (o) => {
     setEditingOrder(o);
     const effectiveStatus = (o.claimStatus && o.claimStatus !== "No Claim") ? o.claimStatus : "Pending";
@@ -421,23 +448,32 @@ function Claims() {
                           {o.paymentStatus || "Wrong Return"}
                         </span>
                       </td>
-                      <td style={{ padding: "14px 16px", fontSize: "13px" }}>
-                        <span style={{
-                          padding: "4px 8px",
-                          borderRadius: "6px",
-                          fontSize: "11px",
-                          fontWeight: "700",
-                          backgroundColor: 
-                            effectiveStatus === "Approved" ? "rgba(16, 185, 129, 0.15)" :
-                            effectiveStatus === "Pending" ? "rgba(245, 158, 11, 0.15)" :
-                            "rgba(239, 68, 68, 0.15)",
-                          color:
-                            effectiveStatus === "Approved" ? "var(--success)" :
-                            effectiveStatus === "Pending" ? "var(--warning)" :
-                            "var(--danger)"
-                        }}>
-                          {effectiveStatus}
-                        </span>
+                      <td style={{ padding: "10px 16px", fontSize: "13px" }}>
+                        <select
+                          value={effectiveStatus}
+                          onChange={(e) => handleInlineClaimStatusChange(o, e.target.value)}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "8px",
+                            fontSize: "12px",
+                            fontWeight: "700",
+                            border: "1px solid var(--border-color)",
+                            cursor: "pointer",
+                            width: "120px",
+                            backgroundColor: 
+                              effectiveStatus === "Approved" ? "rgba(16, 185, 129, 0.15)" :
+                              effectiveStatus === "Pending" ? "rgba(245, 158, 11, 0.15)" :
+                              "rgba(239, 68, 68, 0.15)",
+                            color:
+                              effectiveStatus === "Approved" ? "var(--success)" :
+                              effectiveStatus === "Pending" ? "var(--warning)" :
+                              "var(--danger)"
+                          }}
+                        >
+                          <option value="Pending" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>⏳ Pending</option>
+                          <option value="Approved" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>✅ Approved</option>
+                          <option value="Rejected" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>❌ Rejected</option>
+                        </select>
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px", fontWeight: "600", color: effectiveStatus === "Approved" ? "var(--success)" : "var(--text-secondary)" }}>
                         ₹{(o.claimAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}

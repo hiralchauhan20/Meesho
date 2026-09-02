@@ -746,7 +746,9 @@ function Ledger() {
   const handleProductSelect = (value) => {
     setProductName(value);
 
-    const matchedProduct = products.find(p => p.productName === value);
+    const matchedProduct = products.find(
+      (p) => p.productName.toLowerCase().trim() === value.toLowerCase().trim()
+    );
     if (matchedProduct) {
       setProductId(matchedProduct._id);
       setPurchasePrice(String(matchedProduct.purchasePrice));
@@ -754,16 +756,15 @@ function Ledger() {
       setGst(String(matchedProduct.gst || 18));
     } else {
       setProductId("");
-      setPurchasePrice("");
-      setSellingPrice("");
-      setGst("18");
     }
   };
 
   const handleEditProductSelect = (value) => {
     setEditProductName(value);
 
-    const matchedProduct = products.find(p => p.productName === value);
+    const matchedProduct = products.find(
+      (p) => p.productName.toLowerCase().trim() === value.toLowerCase().trim()
+    );
     if (matchedProduct) {
       setEditProductId(matchedProduct._id);
       setEditPurchasePrice(String(matchedProduct.purchasePrice));
@@ -1641,30 +1642,55 @@ function Ledger() {
                 </span>
               )}
             </div>
-            <select
-              value={productName}
-              onChange={(e) => handleProductSelect(e.target.value)}
-              required
-              style={{ width: "100%" }}
-            >
-              <option value="">Select Product...</option>
-              {products.map((p) => (
-                <option key={p._id} value={p.productName}>{p.productName}</option>
-              ))}
-              {products.length === 0 && (
-                <>
-                  <option value="Air Bra (Pack of 3)">Air Bra (Pack of 3)</option>
-                  <option value="Air Bra (Pack of 6)">Air Bra (Pack of 6)</option>
-                  <option value="Megical Bra (Pack of 3)">Megical Bra (Pack of 3)</option>
-                  <option value="Megical Bra (Pack of 6)">Megical Bra (Pack of 6)</option>
-                  <option value="Shapewear Black">Shapewear Black</option>
-                  <option value="Shapewear Black (Pack of 2)">Shapewear Black (Pack of 2)</option>
-                  <option value="Shapewear Cream">Shapewear Cream</option>
-                  <option value="Shapewear Cream (Pack of 2)">Shapewear Cream (Pack of 2)</option>
-                  <option value="Shapewear Black and Cream (Pack of 2)">Shapewear Black and Cream (Pack of 2)</option>
-                </>
+            <div style={{ position: "relative" }}>
+              <input
+                type="text"
+                list="ledgerProductsDatalist"
+                placeholder="Type or select product (e.g. Net Bra, Shapewear...)"
+                value={productName}
+                onChange={(e) => handleProductSelect(e.target.value)}
+                required
+                style={{ width: "100%", paddingRight: productName ? "32px" : "12px" }}
+                autoComplete="off"
+              />
+              <datalist id="ledgerProductsDatalist">
+                {products.map((p) => (
+                  <option key={p._id} value={p.productName} />
+                ))}
+                {products.length === 0 && (
+                  <>
+                    <option value="Air Bra (Pack of 3)" />
+                    <option value="Air Bra (Pack of 6)" />
+                    <option value="Megical Bra (Pack of 3)" />
+                    <option value="Megical Bra (Pack of 6)" />
+                    <option value="Shapewear Black" />
+                    <option value="Shapewear Cream" />
+                    <option value="Shapewear Black and Cream (Pack of 2)" />
+                  </>
+                )}
+              </datalist>
+              {productName && (
+                <button
+                  type="button"
+                  onClick={() => handleProductSelect("")}
+                  style={{
+                    position: "absolute",
+                    right: "10px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    padding: "2px"
+                  }}
+                  title="Clear product name"
+                >
+                  ✕
+                </button>
               )}
-            </select>
+            </div>
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Buying Price (₹)</label>
@@ -2170,19 +2196,44 @@ function Ledger() {
                 </div>
                 <div className="form-full">
                   <label>Product Name</label>
-                  <select 
-                    value={editProductName} 
-                    onChange={(e) => handleEditProductSelect(e.target.value)} 
-                    required 
-                  >
-                    <option value="">Select Product...</option>
-                    {products.map((p) => (
-                      <option key={p._id} value={p.productName}>{p.productName}</option>
-                    ))}
-                    {editProductName && !products.some(p => p.productName === editProductName) && (
-                      <option value={editProductName}>{editProductName} (Legacy)</option>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type="text"
+                      list="editProductsDatalist"
+                      placeholder="Type or select product..."
+                      value={editProductName}
+                      onChange={(e) => handleEditProductSelect(e.target.value)}
+                      required
+                      style={{ width: "100%", paddingRight: editProductName ? "32px" : "12px" }}
+                      autoComplete="off"
+                    />
+                    <datalist id="editProductsDatalist">
+                      {products.map((p) => (
+                        <option key={p._id} value={p.productName} />
+                      ))}
+                    </datalist>
+                    {editProductName && (
+                      <button
+                        type="button"
+                        onClick={() => handleEditProductSelect("")}
+                        style={{
+                          position: "absolute",
+                          right: "10px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          background: "none",
+                          border: "none",
+                          color: "var(--text-muted)",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                          padding: "2px"
+                        }}
+                        title="Clear product name"
+                      >
+                        ✕
+                      </button>
                     )}
-                  </select>
+                  </div>
                 </div>
                 <div>
                   <label>Buying Price (₹)</label>

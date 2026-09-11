@@ -18,6 +18,17 @@ const expenseSchema = new mongoose.Schema(
       required: true,
     },
 
+    shopName: {
+      type: String,
+      default: "HKC Collection",
+      trim: true,
+    },
+
+    platform: {
+      type: String,
+      default: "Meesho",
+    },
+
     amount: {
       type: Number,
       required: true,

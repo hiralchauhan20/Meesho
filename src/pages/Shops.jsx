@@ -105,11 +105,12 @@ function Shops() {
     }
   };
 
-  // Compute stats per shop
+  // Compute stats per shop (keyed by shopName and platform)
   const shopStats = useMemo(() => {
     const statsMap = {};
     shops.forEach(s => {
-      statsMap[s.shopName] = {
+      const key = `${s.shopName.toLowerCase()}_${(s.platform || "meesho").toLowerCase()}`;
+      statsMap[key] = {
         totalOrders: 0,
         completedOrders: 0,
         pendingOrders: 0,
@@ -120,9 +121,12 @@ function Shops() {
     });
 
     orders.forEach(o => {
-      const sName = o.shopName || "HKC Collection";
-      if (!statsMap[sName]) {
-        statsMap[sName] = {
+      const sName = (o.shopName || "").trim().toLowerCase();
+      const sPlatform = (o.shopPlatform || "meesho").trim().toLowerCase();
+      const key = `${sName}_${sPlatform}`;
+
+      if (!statsMap[key]) {
+        statsMap[key] = {
           totalOrders: 0,
           completedOrders: 0,
           pendingOrders: 0,
@@ -132,16 +136,16 @@ function Shops() {
         };
       }
 
-      statsMap[sName].totalOrders += 1;
+      statsMap[key].totalOrders += 1;
       const status = o.paymentStatus || "Pending";
       if (status === "Complete") {
-        statsMap[sName].completedOrders += 1;
+        statsMap[key].completedOrders += 1;
         const sell = (o.sellingPrice || o.productId?.sellingPrice || 0) * (o.quantity || 1);
-        statsMap[sName].totalSales += sell;
+        statsMap[key].totalSales += sell;
       } else if (status === "Pending") {
-        statsMap[sName].pendingOrders += 1;
+        statsMap[key].pendingOrders += 1;
       } else if (status === "Return" || status === "Wrong Return" || status === "RTO Returned" || status === "Cancel") {
-        statsMap[sName].returnOrders += 1;
+        statsMap[key].returnOrders += 1;
       }
     });
 
@@ -567,7 +571,8 @@ function Shops() {
         }}>
           {filteredShops.map((shop) => {
             const pStyle = getPlatformStyle(shop.platform);
-            const stats = shopStats[shop.shopName] || { totalOrders: 0, completedOrders: 0, pendingOrders: 0, returnOrders: 0, totalSales: 0 };
+            const statsKey = `${shop.shopName.toLowerCase()}_${(shop.platform || "meesho").toLowerCase()}`;
+            const stats = shopStats[statsKey] || shopStats[shop.shopName] || { totalOrders: 0, completedOrders: 0, pendingOrders: 0, returnOrders: 0, totalSales: 0 };
             const isDefaultShop = Boolean(shop.isDefault);
 
             return (
@@ -705,7 +710,7 @@ function Shops() {
                   {/* View Orders Button */}
                   <button
                     type="button"
-                    onClick={() => navigate(`/accounts?shop=${encodeURIComponent(shop.shopName)}`)}
+                    onClick={() => navigate(`/accounts?shop=${encodeURIComponent(shop.shopName)}&platform=${encodeURIComponent(shop.platform || "Meesho")}`)}
                     style={{
                       background: "rgba(99, 102, 241, 0.1)",
                       border: "1px solid rgba(99, 102, 241, 0.25)",

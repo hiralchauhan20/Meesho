@@ -44,9 +44,12 @@ const calculateOrderProfit = (o) => {
 
   if (paymentStatus === "Wrong Return") {
     if (o.claimStatus === "Approved") {
-      return claimAmt - totalPurchaseCost;
+      const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "")
+        ? Number(o.lossAmount)
+        : 0;
+      return claimAmt - 157 - loss;
     }
-    return -totalPurchaseCost;
+    return -157;
   }
   if (paymentStatus === "Return") {
     if (o.claimStatus === "Approved") {
@@ -67,6 +70,7 @@ const calculateOrderProfit = (o) => {
 function Ledger() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialShopParam = searchParams.get("shop") || "All";
+  const initialPlatformParam = searchParams.get("platform") || "All";
 
   const [orders, setOrders] = useState([]);
   const [stocks, setStocks] = useState([]);
@@ -77,12 +81,66 @@ function Ledger() {
 
   // Search / Filter states
   const [filterShop, setFilterShop] = useState(initialShopParam);
+  const [filterPlatform, setFilterPlatform] = useState(initialPlatformParam);
   const [filterProduct, setFilterProduct] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCourier, setFilterCourier] = useState("");
   const [filterCustomerState, setFilterCustomerState] = useState("");
   const [filterOrderNo, setFilterOrderNo] = useState("");
+
+  useEffect(() => {
+    const shopParam = searchParams.get("shop");
+    const platformParam = searchParams.get("platform");
+    if (shopParam) {
+      setFilterShop(shopParam);
+    }
+    if (platformParam) {
+      setFilterPlatform(platformParam);
+    } else if (!shopParam) {
+      setFilterPlatform("All");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (filterShop) {
+      const matched = shops.find(s => 
+        (s.shopName || "").toLowerCase() === filterShop.trim().toLowerCase() &&
+        (filterPlatform === "All" || (s.platform || "").toLowerCase() === filterPlatform.trim().toLowerCase())
+      ) || shops.find(s => (s.shopName || "").toLowerCase() === filterShop.trim().toLowerCase());
+
+      localStorage.setItem("currentViewingShop", JSON.stringify({
+        shopName: filterShop,
+        platform: matched?.platform || (filterPlatform !== "All" ? filterPlatform : "")
+      }));
+      window.dispatchEvent(new Event("shopChange"));
+    }
+  }, [filterShop, filterPlatform, shops]);
+
+  useEffect(() => {
+    if (filterShop && filterShop !== "All") {
+      setShopName(filterShop);
+      setPdfSelectedShop(filterShop);
+      const matched = shops.find(s => 
+        (s.shopName || "").toLowerCase() === filterShop.trim().toLowerCase() &&
+        (filterPlatform === "All" || (s.platform || "").toLowerCase() === filterPlatform.trim().toLowerCase())
+      ) || shops.find(s => (s.shopName || "").toLowerCase() === filterShop.trim().toLowerCase());
+
+      if (matched) {
+        setShopPlatform(matched.platform || "Meesho");
+      }
+    }
+  }, [filterShop, filterPlatform, shops]);
+
+  const currentShopInfo = useMemo(() => {
+    if (!filterShop || filterShop === "All") return null;
+    return shops.find(s => (s.shopName || "").toLowerCase() === filterShop.trim().toLowerCase());
+  }, [filterShop, shops]);
+
+  const currentShopStyle = useMemo(() => {
+    if (!currentShopInfo) return null;
+    return getPlatformStyle(currentShopInfo.platform);
+  }, [currentShopInfo]);
 
   // Form states for fast entry
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // Default today
@@ -118,6 +176,7 @@ function Ledger() {
   const [editDispatchStatus, setEditDispatchStatus] = useState("Pending");
   const [editClaimStatus, setEditClaimStatus] = useState("No Claim");
   const [editClaimAmount, setEditClaimAmount] = useState("0");
+  const [editLossAmount, setEditLossAmount] = useState("");
 
   // Custom Modal States
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -677,6 +736,7 @@ function Ledger() {
     setEditDispatchStatus(o.dispatchStatus || "Pending");
     setEditClaimStatus(o.claimStatus || "No Claim");
     setEditClaimAmount(o.claimAmount !== undefined ? String(o.claimAmount) : "0");
+    setEditLossAmount(o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount > 0 ? String(o.lossAmount) : "");
   };
 
   const handleEditSubmit = async (e) => {
@@ -716,6 +776,7 @@ function Ledger() {
         dispatchStatus: editDispatchStatus,
         claimStatus: finalClaimStatus,
         claimAmount: Number(editClaimAmount) || 0,
+        lossAmount: Number(editLossAmount) >= 0 ? Number(editLossAmount) : 0,
         date: new Date(editDate).toISOString()
       };
 
@@ -1088,7 +1149,12 @@ function Ledger() {
       if (payStatus === "Return") {
         totalReturnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
       } else if (payStatus === "Wrong Return") {
-        totalReturnCost += (o.claimStatus === "Approved" ? -claimAmt : 0);
+        if (o.claimStatus === "Approved") {
+          const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+          totalReturnCost += (157 + loss - claimAmt);
+        } else {
+          totalReturnCost += 157;
+        }
       }
     });
 
@@ -1102,8 +1168,13 @@ function Ledger() {
     return orders.filter((o) => {
       // Shop filter
       if (filterShop && filterShop !== "All") {
-        const orderShop = (o.shopName || "HKC Collection").trim().toLowerCase();
+        const orderShop = (o.shopName || "").trim().toLowerCase();
         if (orderShop !== filterShop.trim().toLowerCase()) return false;
+
+        if (filterPlatform && filterPlatform !== "All") {
+          const orderPlatform = (o.shopPlatform || "").trim().toLowerCase();
+          if (orderPlatform && orderPlatform !== filterPlatform.trim().toLowerCase()) return false;
+        }
       }
       // Date filter
       if (filterDate) {
@@ -1160,7 +1231,12 @@ function Ledger() {
       if (payStatus === "Return") {
         totalReturnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
       } else if (payStatus === "Wrong Return") {
-        totalReturnCost += (o.claimStatus === "Approved" ? -claimAmt : 0);
+        if (o.claimStatus === "Approved") {
+          const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+          totalReturnCost += (157 + loss - claimAmt);
+        } else {
+          totalReturnCost += 157;
+        }
       }
     });
 
@@ -1243,15 +1319,17 @@ function Ledger() {
     return { totalClaims, pendingClaims, approvedClaims, rejectedClaims, approvedAmount };
   }, [orders]);
 
-  const hasFilter = (filterShop && filterShop !== "All") || filterDate || filterStatus || filterProduct || filterCourier || filterCustomerState || filterOrderNo.trim();
+  const hasFilter = (filterShop && filterShop !== "All") || (filterPlatform && filterPlatform !== "All") || filterDate || filterStatus || filterProduct || filterCourier || filterCustomerState || filterOrderNo.trim();
   const clearFilters = () => {
     setFilterShop("All");
+    setFilterPlatform("All");
     setFilterProduct("");
     setFilterDate("");
     setFilterStatus("");
     setFilterCourier("");
     setFilterCustomerState("");
     setFilterOrderNo("");
+    setSearchParams({});
   };
 
   return (
@@ -1304,20 +1382,33 @@ function Ledger() {
               Shop / Account
             </label>
             <select
-              value={filterShop}
+              value={filterShop === "All" ? "All" : (filterPlatform !== "All" ? `${filterShop}|||${filterPlatform}` : filterShop)}
               onChange={(e) => {
-                setFilterShop(e.target.value);
-                setSearchParams(e.target.value === "All" ? {} : { shop: e.target.value });
+                const val = e.target.value;
+                if (val === "All") {
+                  setFilterShop("All");
+                  setFilterPlatform("All");
+                  setSearchParams({});
+                } else if (val.includes("|||")) {
+                  const [sName, sPlatform] = val.split("|||");
+                  setFilterShop(sName);
+                  setFilterPlatform(sPlatform);
+                  setSearchParams({ shop: sName, platform: sPlatform });
+                } else {
+                  setFilterShop(val);
+                  setFilterPlatform("All");
+                  setSearchParams({ shop: val });
+                }
               }}
               style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
             >
               <option value="All">All Shops</option>
               {shops.map((s) => (
-                <option key={s._id} value={s.shopName}>
+                <option key={s._id} value={`${s.shopName}|||${s.platform}`}>
                   {s.shopName} ({s.platform})
                 </option>
               ))}
-              {Array.from(new Set(orders.map(o => o.shopName || "HKC Collection")))
+              {Array.from(new Set(orders.map(o => o.shopName).filter(Boolean)))
                 .filter(name => !shops.some(s => s.shopName === name))
                 .map(name => (
                   <option key={name} value={name}>{name}</option>
@@ -1995,6 +2086,11 @@ function Ledger() {
                           <option value="Return" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Return</option>
                           <option value="Wrong Return" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Wrong Return</option>
                         </select>
+                        {o.paymentStatus === "Wrong Return" && o.lossAmount > 0 && (
+                          <div style={{ fontSize: "10px", color: "var(--danger)", marginTop: "2px", fontWeight: "600" }}>
+                            Loss: ₹{o.lossAmount}
+                          </div>
+                        )}
                       </td>
 
                       {/* Platform Claim status and amount */}
@@ -2279,6 +2375,24 @@ function Ledger() {
                     <option value="Dispatched">Dispatched</option>
                   </select>
                 </div>
+                {editPaymentStatus === "Wrong Return" && (
+                  <div className="form-full">
+                    <label>
+                      Product Damage / Loss Amount (₹)
+                      <span style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: "normal", marginLeft: "6px" }}>
+                        (જેટલું નુકસાન થયું હોય તે રકમ - Default: પૂરી ખરીદ કિંમત)
+                      </span>
+                    </label>
+                    <input 
+                      type="number" 
+                      value={editLossAmount} 
+                      onChange={(e) => setEditLossAmount(e.target.value)} 
+                      placeholder="દા.ત. ₹200 (6 માંથી 2 ખોવાયા તો 2 નંગનું નુકસાન)"
+                      min="0" 
+                      step="0.01" 
+                    />
+                  </div>
+                )}
 
                 <div className="form-full">
                   <label>Platform Claim Status</label>

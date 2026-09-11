@@ -36,8 +36,8 @@ const shopSchema = new mongoose.Schema(
   }
 );
 
-// Compound index so a user cannot have two shops with the exact same name
-shopSchema.index({ userId: 1, shopName: 1 }, { unique: true });
+// Compound index: user cannot have duplicate shop names on the same platform
+shopSchema.index({ userId: 1, platform: 1, shopName: 1 }, { unique: true });
 
 const Shop = mongoose.model("Shop", shopSchema);
 

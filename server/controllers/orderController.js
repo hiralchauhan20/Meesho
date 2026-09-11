@@ -64,11 +64,11 @@ export const getOrders = async (req, res) => {
 
     const orders = await Order.find(query).populate("productId");
 
-    // Ensure shopName defaults to "HKC Collection" if null/undefined in legacy data
+    // Ensure shopName is always present
     const sanitizedOrders = orders.map(o => {
       const obj = o.toObject();
       if (!obj.shopName) {
-        obj.shopName = "HKC Collection";
+        obj.shopName = "My Store";
         obj.shopPlatform = "Meesho";
       }
       return obj;

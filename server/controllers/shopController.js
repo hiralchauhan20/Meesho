@@ -1,25 +1,12 @@
 import Shop from "../models/Shop.js";
 import Order from "../models/Order.js";
+import User from "../models/User.js";
 
-// Get All Shops for logged in user (auto-seeds HKC Collection if none exist)
+// Get All Shops for logged in user
 export const getShops = async (req, res) => {
   try {
     const userId = req.user.id;
-    let shops = await Shop.find({ userId }).sort({ isDefault: -1, createdAt: 1 });
-
-    // Auto-create default "HKC Collection" if user has no shops registered yet
-    if (shops.length === 0) {
-      const defaultShop = await Shop.create({
-        userId,
-        shopName: "HKC Collection",
-        platform: "Meesho",
-        status: "Active",
-        description: "Primary default shop account",
-        isDefault: true,
-      });
-      shops = [defaultShop];
-    }
-
+    const shops = await Shop.find({ userId }).sort({ isDefault: -1, createdAt: 1 });
     res.status(200).json(shops);
   } catch (error) {
     res.status(500).json({
@@ -39,16 +26,18 @@ export const addShop = async (req, res) => {
     }
 
     const trimmedName = shopName.trim();
+    const targetPlatform = platform || "Meesho";
 
-    // Check duplicate shop name for user
+    // Check duplicate shop name on the same platform for user
     const existing = await Shop.findOne({
       userId,
+      platform: targetPlatform,
       shopName: { $regex: new RegExp(`^${trimmedName}$`, "i") },
     });
 
     if (existing) {
       return res.status(400).json({
-        message: `A shop named "${trimmedName}" already exists! Please use a unique shop name.`,
+        message: `A shop named "${trimmedName}" already exists on ${targetPlatform}! You can use "${trimmedName}" for another platform (like Flipkart/Amazon), but not twice on ${targetPlatform}.`,
       });
     }
 
@@ -62,7 +51,7 @@ export const addShop = async (req, res) => {
     const newShop = await Shop.create({
       userId,
       shopName: trimmedName,
-      platform: platform || "Meesho",
+      platform: targetPlatform,
       status: status || "Active",
       description: description ? description.trim() : "",
       isDefault: shouldBeDefault,
@@ -91,27 +80,29 @@ export const updateShop = async (req, res) => {
       return res.status(404).json({ message: "Shop not found" });
     }
 
-    if (shopName && shopName.trim()) {
-      const trimmedName = shopName.trim();
-      const duplicate = await Shop.findOne({
-        userId,
-        _id: { $ne: id },
-        shopName: { $regex: new RegExp(`^${trimmedName}$`, "i") },
+    const trimmedName = shopName ? shopName.trim() : existingShop.shopName;
+    const targetPlatform = platform || existingShop.platform;
+
+    // Check duplicate shop name on the same platform
+    const duplicate = await Shop.findOne({
+      userId,
+      _id: { $ne: id },
+      platform: targetPlatform,
+      shopName: { $regex: new RegExp(`^${trimmedName}$`, "i") },
+    });
+
+    if (duplicate) {
+      return res.status(400).json({
+        message: `Another shop with name "${trimmedName}" already exists on ${targetPlatform}!`,
       });
+    }
 
-      if (duplicate) {
-        return res.status(400).json({
-          message: `Another shop with name "${trimmedName}" already exists!`,
-        });
-      }
-
-      // If shop name changed, optionally update linked orders
-      if (existingShop.shopName !== trimmedName) {
-        await Order.updateMany(
-          { userId, shopName: existingShop.shopName },
-          { shopName: trimmedName, shopPlatform: platform || existingShop.platform }
-        );
-      }
+    // If shop name or platform changed, update linked orders
+    if (existingShop.shopName !== trimmedName || existingShop.platform !== targetPlatform) {
+      await Order.updateMany(
+        { userId, shopName: existingShop.shopName, shopPlatform: existingShop.platform },
+        { shopName: trimmedName, shopPlatform: targetPlatform }
+      );
     }
 
     if (isDefault) {

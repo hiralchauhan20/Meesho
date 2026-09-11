@@ -16,11 +16,18 @@ const calculateOrderProfit = (o) => {
     return -5;
   }
   
+  const buyingVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
+  const qtyVal = o.quantity || 1;
+  const totalPurchaseCost = buyingVal * qtyVal;
+
   if (paymentStatus === "Wrong Return") {
     if (o.claimStatus === "Approved") {
-      return claimAmt;
+      const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "")
+        ? Number(o.lossAmount)
+        : 0;
+      return claimAmt - 157 - loss;
     }
-    return 0;
+    return -157;
   }
 
   if (paymentStatus === "Return") {
@@ -31,10 +38,8 @@ const calculateOrderProfit = (o) => {
   }
   
   const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
-  const buyingVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
   const gstRate = o.gst || o.productId?.gst || 0;
   const gstAmount = (sellingVal * gstRate) / 100;
-  const qtyVal = o.quantity || 1;
   return (sellingVal - gstAmount - buyingVal) * qtyVal;
 };
 
@@ -297,7 +302,12 @@ function Reports() {
       } else if (payStatus === "Return") {
         orderReturnCost = (o.claimStatus === "Approved") ? (157 - claimAmt) : 157;
       } else if (payStatus === "Wrong Return") {
-        orderReturnCost = (o.claimStatus === "Approved") ? -claimAmt : 0;
+        if (o.claimStatus === "Approved") {
+          const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+          orderReturnCost = 157 + loss - claimAmt;
+        } else {
+          orderReturnCost = 157;
+        }
       }
       
       monthlyData[monthKey].gst += orderGst;
@@ -545,7 +555,12 @@ function Reports() {
         } else if (payStatus === "Return") {
           data[mIdx].returnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
         } else if (payStatus === "Wrong Return") {
-          data[mIdx].returnCost += (o.claimStatus === "Approved" ? -claimAmt : 0);
+          if (o.claimStatus === "Approved") {
+            const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+            data[mIdx].returnCost += (157 + loss - claimAmt);
+          } else {
+            data[mIdx].returnCost += 157;
+          }
         }
 
         if (payStatus === "Return" || payStatus === "Wrong Return") {
@@ -636,7 +651,12 @@ function Reports() {
           } else if (payStatus === "Return") {
             data[dayIdx].returnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
           } else if (payStatus === "Wrong Return") {
-            data[dayIdx].returnCost += (o.claimStatus === "Approved" ? -claimAmt : 0);
+            if (o.claimStatus === "Approved") {
+              const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+              data[dayIdx].returnCost += (157 + loss - claimAmt);
+            } else {
+              data[dayIdx].returnCost += 157;
+            }
           }
 
           if (payStatus === "Return" || payStatus === "Wrong Return") {

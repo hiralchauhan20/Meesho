@@ -1,8 +1,52 @@
+import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { FaSun, FaMoon, FaStore } from "react-icons/fa";
+import { API_URL } from "../config";
 
 function Navbar({ toggleTheme, theme }) {
   const location = useLocation();
+  const [shops, setShops] = useState([]);
+  const [viewingShop, setViewingShop] = useState(() => {
+    try {
+      const stored = localStorage.getItem("currentViewingShop");
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    const fetchShops = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+        const res = await fetch(`${API_URL}/api/shops`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setShops(data);
+        }
+      } catch (e) {
+        console.error("Failed to load shops for navbar:", e);
+      }
+    };
+    fetchShops();
+
+    const handleShopChange = () => {
+      try {
+        const stored = localStorage.getItem("currentViewingShop");
+        if (stored) {
+          setViewingShop(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    window.addEventListener("shopChange", handleShopChange);
+    return () => window.removeEventListener("shopChange", handleShopChange);
+  }, []);
 
   const getPageName = () => {
     switch (location.pathname) {
@@ -19,16 +63,52 @@ function Navbar({ toggleTheme, theme }) {
 
   const getActiveStoreName = () => {
     try {
+      const searchParams = new URLSearchParams(location.search);
+      const shopParam = searchParams.get("shop");
+
+      // When on /accounts, display the active shop whose orders are being viewed
+      if (location.pathname === "/accounts") {
+        if (shopParam) {
+          if (shopParam === "All") {
+            return "All Shops";
+          }
+          const matched = shops.find(
+            (s) => (s.shopName || "").toLowerCase() === shopParam.trim().toLowerCase()
+          );
+          const platform = matched?.platform ? ` - ${matched.platform}` : "";
+          return `${shopParam}${platform}`;
+        }
+
+        if (viewingShop?.shopName) {
+          if (viewingShop.shopName === "All") {
+            return "All Shops";
+          }
+          const matched = shops.find(
+            (s) => (s.shopName || "").toLowerCase() === viewingShop.shopName.trim().toLowerCase()
+          );
+          const platform = (matched?.platform || viewingShop.platform) ? ` - ${matched?.platform || viewingShop.platform}` : "";
+          return `${viewingShop.shopName}${platform}`;
+        }
+      }
+
+      // Default shop if set
+      const defaultShop = shops.find(s => s.isDefault);
+      if (defaultShop) {
+        const platform = defaultShop.platform ? ` - ${defaultShop.platform}` : "";
+        return `${defaultShop.shopName}${platform}`;
+      }
+
+      // User store fallback
       const userStr = localStorage.getItem("user");
       if (userStr) {
         const user = JSON.parse(userStr);
-        const platform = user.platform ? ` - ${user.platform}` : "";
+        const platform = user.platform ? ` - ${user.platform}` : " - Meesho";
         return `${user.name || "HKC Collection"}${platform}`;
       }
     } catch (e) {
       console.error(e);
     }
-    return "HKC Collection";
+    return "HKC Collection - Meesho";
   };
 
   return (

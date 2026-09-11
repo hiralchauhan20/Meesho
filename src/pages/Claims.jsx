@@ -18,6 +18,7 @@ function Claims() {
   const [editingOrder, setEditingOrder] = useState(null);
   const [editClaimStatus, setEditClaimStatus] = useState("Pending");
   const [editClaimAmount, setEditClaimAmount] = useState("0");
+  const [editLossAmount, setEditLossAmount] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Custom Alert States
@@ -84,7 +85,8 @@ function Claims() {
         },
         body: JSON.stringify({
           claimStatus: editClaimStatus,
-          claimAmount: editClaimStatus === "Approved" ? (Number(editClaimAmount) || 0) : 0
+          claimAmount: editClaimStatus === "Approved" ? (Number(editClaimAmount) || 0) : 0,
+          lossAmount: Number(editLossAmount) >= 0 ? Number(editLossAmount) : 0
         })
       });
 
@@ -130,6 +132,7 @@ function Claims() {
     const effectiveStatus = (o.claimStatus && o.claimStatus !== "No Claim") ? o.claimStatus : "Pending";
     setEditClaimStatus(effectiveStatus);
     setEditClaimAmount(o.claimAmount !== undefined ? String(o.claimAmount) : "0");
+    setEditLossAmount(o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount > 0 ? String(o.lossAmount) : "");
   };
 
   // Global Claims Stats (calculated from all transactions matching shop filter)
@@ -376,6 +379,7 @@ function Claims() {
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Order Status</th>
                 <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Claim Status</th>
                 <th style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px" }}>Claim Amount (₹)</th>
+                <th style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px" }}>Net Loss / P&L (₹)</th>
                 <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>Action</th>
               </tr>
             </thead>
@@ -435,6 +439,11 @@ function Claims() {
                       </td>
                       <td style={{ padding: "14px 16px", fontWeight: "600", color: "var(--text-primary)", fontSize: "13px" }}>
                         {prodName}
+                        {o.paymentStatus === "Wrong Return" && o.lossAmount > 0 && (
+                          <div style={{ fontSize: "11px", color: "var(--danger)", fontWeight: "500", marginTop: "2px" }}>
+                            Product Loss: ₹{o.lossAmount}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: "14px 16px", fontSize: "13px" }}>
                         <span style={{
@@ -477,6 +486,20 @@ function Claims() {
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px", fontWeight: "600", color: effectiveStatus === "Approved" ? "var(--success)" : "var(--text-secondary)" }}>
                         ₹{(o.claimAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px", fontWeight: "700" }}>
+                        {(() => {
+                          const loss = Number(o.lossAmount) || 0;
+                          const claimAmt = effectiveStatus === "Approved" ? (Number(o.claimAmount) || 0) : 0;
+                          const netPL = o.paymentStatus === "Wrong Return" 
+                            ? (effectiveStatus === "Approved" ? (claimAmt - 157 - loss) : -157)
+                            : (claimAmt - 157);
+                          return (
+                            <span style={{ color: netPL >= 0 ? "var(--success)" : "var(--danger)" }}>
+                              ₹{netPL.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "center" }}>
                         <button 
@@ -539,6 +562,24 @@ function Claims() {
                     <option value="Approved">Approved</option>
                     <option value="Rejected">Rejected</option>
                   </select>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)" }}>
+                    Product Damage / Loss Amount (₹)
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)", marginLeft: "4px" }}>
+                      (જો ખાલી રાખશો અથવા 0 તો પૂરી ખરીદ કિંમત ગણાશે)
+                    </span>
+                  </label>
+                  <input 
+                    type="number" 
+                    value={editLossAmount} 
+                    onChange={(e) => setEditLossAmount(e.target.value)} 
+                    placeholder="દા.ત. ₹200 (6 માંથી 2 ખોવાયા તો 2 નંગનું નુકસાન)"
+                    min="0" 
+                    step="0.01" 
+                    style={{ height: "38px", padding: "0 12px" }}
+                  />
                 </div>
 
                 {editClaimStatus === "Approved" && (

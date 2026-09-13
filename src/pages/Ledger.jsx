@@ -278,7 +278,7 @@ function Ledger() {
     // 2. Extract Key Features from Label Text:
     // (A) Product Family
     const isNetBra = /\b(?:net\s*bra|netbra|net)\b/i.test(pageLower) || /\bnb\b/i.test(pageLower);
-    const isAirBra = /\b(?:air\s*bra|airbra)\b/i.test(pageLower) || /\bab\b/i.test(pageLower);
+    const isAirBra = /\b(?:air\s*bra|airbra|sports?\s*bra|cotton\s*full\s*coverage)\b/i.test(pageLower) || /\bab\b/i.test(pageLower);
     const isMegical = /\b(?:megical|magical|magic)\b/i.test(pageLower);
     const isShapewear = /\b(?:shapewear|shape\s*wear|tummy)\b/i.test(pageLower);
 
@@ -321,21 +321,23 @@ function Ledger() {
       const pIsMegical = /\b(?:megical|magical|magic)\b/i.test(pLower);
       const pIsShapewear = /\bshapewear\b/i.test(pLower);
 
-      if (isNetBra) {
-        if (pIsNetBra) score += 100;
+      if (isAirBra && !isNetBra) {
+        if (pIsAirBra) score += 200;
+        else score -= 1000;
+      } else if (isNetBra) {
+        if (pIsNetBra) score += 200;
+        else score -= 1000;
+      } else if (isMegical) {
+        if (pIsMegical) score += 200;
+        else score -= 1000;
+      } else if (isShapewear) {
+        if (pIsShapewear) score += 200;
         else score -= 1000;
       }
-      if (isAirBra) {
-        if (pIsAirBra) score += 100;
-        else score -= 1000;
-      }
-      if (isMegical) {
-        if (pIsMegical) score += 100;
-        else score -= 1000;
-      }
-      if (isShapewear) {
-        if (pIsShapewear) score += 100;
-        else score -= 1000;
+
+      // If Net Bra product, but label doesn't mention Net or Cup size (A/B), penalize
+      if (pIsNetBra && !isNetBra && !extractedSize) {
+        score -= 500;
       }
 
       // 2. Check Pack Count
@@ -344,13 +346,13 @@ function Ledger() {
       const pPack2 = /\b(?:pack\s*(?:of)?\s*2|2\s*pk|2\s*pcs?)\b/i.test(pLower);
 
       if (extractedPack === 6) {
-        if (pPack6) score += 80;
+        if (pPack6) score += 100;
         else if (pPack3 || pPack2) score -= 500;
       } else if (extractedPack === 3) {
-        if (pPack3) score += 80;
+        if (pPack3) score += 100;
         else if (pPack6 || pPack2) score -= 500;
       } else if (extractedPack === 2) {
-        if (pPack2) score += 80;
+        if (pPack2) score += 100;
         else if (pPack6 || pPack3) score -= 500;
       }
 
@@ -365,7 +367,7 @@ function Ledger() {
           score -= 1000; // STRICT size mismatch!
         }
       } else if (pSize) {
-        score -= 30;
+        score -= 100;
       }
 
       // 4. Check Colors on Net Bra & Shapewear

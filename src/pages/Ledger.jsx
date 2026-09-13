@@ -284,11 +284,11 @@ function Ledger() {
 
     // (B) Pack Count
     let extractedPack = null;
-    if (/\b(?:pack\s*(?:of)?\s*6|6\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b6pk\b/i.test(pageLower)) {
+    if (/\b(?:pack\s*(?:of)?\s*6|6\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b6pk\b/i.test(pageLower) || /\b6\s*[-_]\s*[a-z]/i.test(pageLower)) {
       extractedPack = 6;
-    } else if (/\b(?:pack\s*(?:of)?\s*3|3\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b3pk\b/i.test(pageLower)) {
+    } else if (/\b(?:pack\s*(?:of)?\s*3|3\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b3pk\b/i.test(pageLower) || /\b3\s*[-_]\s*[a-z]/i.test(pageLower)) {
       extractedPack = 3;
-    } else if (/\b(?:pack\s*(?:of)?\s*2|2\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b2pk\b/i.test(pageLower)) {
+    } else if (/\b(?:pack\s*(?:of)?\s*2|2\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b2pk\b/i.test(pageLower) || /\b2\s*[-_]\s*[a-z]/i.test(pageLower)) {
       extractedPack = 2;
     }
 
@@ -378,15 +378,15 @@ function Ledger() {
 
       if (pHasRuby) {
         if (hasRuby) score += 100;
-        else score -= 100;
+        else score -= 200;
       }
       if (pHasDarkPink) {
-        if (hasDarkPink) score += 60;
-        else score -= 40;
+        if (hasDarkPink) score += 80;
+        else score -= 150;
       }
       if (pHasLightPink) {
         if (hasLightPink) score += 80;
-        else score -= 60;
+        else score -= 150;
       }
       if (pHasCream) {
         if (hasCream) score += 40;
@@ -396,6 +396,7 @@ function Ledger() {
       }
       if (pHasRed) {
         if (hasRed) score += 40;
+        else score -= 100;
       }
 
       if (isShapewear) {

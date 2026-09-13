@@ -201,63 +201,236 @@ function Ledger() {
   const [parsedOrders, setParsedOrders] = useState([]);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [expandedRawText, setExpandedRawText] = useState(null);
+  const getStateFromPincode = (pincodeStr) => {
+    if (!pincodeStr || typeof pincodeStr !== "string") return null;
+    const pin = parseInt(pincodeStr.replace(/\D/g, ""), 10);
+    if (isNaN(pin) || pin < 110000 || pin > 999999) return null;
+
+    const prefix2 = Math.floor(pin / 10000);
+    const prefix3 = Math.floor(pin / 1000);
+
+    if (prefix2 === 11) return "Delhi";
+    if (prefix2 >= 12 && prefix2 <= 13) return "Haryana";
+    if (prefix2 >= 14 && prefix2 <= 15) return "Punjab";
+    if (prefix2 === 16) return "Chandigarh";
+    if (prefix2 === 17) return "Himachal Pradesh";
+    if (prefix2 >= 18 && prefix2 <= 19) return "Jammu & Kashmir";
+    
+    if (prefix3 >= 246 && prefix3 <= 249) return "Uttarakhand";
+    if (prefix3 >= 262 && prefix3 <= 263) return "Uttarakhand";
+    if (prefix2 >= 20 && prefix2 <= 28) return "Uttar Pradesh";
+
+    if (prefix2 >= 30 && prefix2 <= 34) return "Rajasthan";
+    if (prefix2 >= 36 && prefix2 <= 39) return "Gujarat";
+
+    if (prefix3 === 403) return "Goa";
+    if (prefix2 >= 40 && prefix2 <= 44) return "Maharashtra";
+
+    if (prefix2 >= 45 && prefix2 <= 48) return "Madhya Pradesh";
+    if (prefix2 === 49) return "Chhattisgarh";
+
+    if (prefix2 === 50) return "Telangana";
+    if (prefix2 >= 51 && prefix2 <= 53) return "Andhra Pradesh";
+
+    if (prefix2 >= 56 && prefix2 <= 59) return "Karnataka";
+
+    if (prefix2 >= 60 && prefix2 <= 64) return "Tamil Nadu";
+    if (prefix2 >= 67 && prefix2 <= 69) return "Kerala";
+
+    if (prefix3 === 744) return "Other UT";
+    if (prefix2 >= 70 && prefix2 <= 74) return "West Bengal";
+
+    if (prefix2 >= 75 && prefix2 <= 77) return "Odisha";
+    if (prefix2 === 78) return "Assam";
+
+    if (prefix3 >= 790 && prefix3 <= 792) return "Arunachal Pradesh";
+    if (prefix3 >= 793 && prefix3 <= 794) return "Meghalaya";
+    if (prefix3 === 795) return "Manipur";
+    if (prefix3 === 796) return "Mizoram";
+    if (prefix3 >= 797 && prefix3 <= 798) return "Nagaland";
+    if (prefix3 === 799) return "Tripura";
+    if (prefix3 === 737) return "Sikkim";
+
+    if ((prefix2 >= 81 && prefix2 <= 83) || (prefix3 >= 814 && prefix3 <= 835)) return "Jharkhand";
+    if (prefix2 >= 80 && prefix2 <= 85) return "Bihar";
+
+    return null;
+  };
+
   // Helper matching functions for PDF Label Import
   const autoMatchProduct = (text, productsList) => {
-    if (!productsList || productsList.length === 0) return null;
-    
+    if (!productsList || productsList.length === 0 || !text) return null;
+
     const pageLower = text.toLowerCase();
-    let bestProduct = null;
-    let bestScore = 0;
     
+    // Normalize strings (remove all non-alphanumeric)
+    const cleanStr = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const normPage = cleanStr(pageLower);
+
+    // 1. Direct exact / normalized match
     for (const p of productsList) {
-      const nameLower = p.productName.toLowerCase();
-      
-      // 1. Direct exact or normalized check first
-      const normName = nameLower.replace(/[^a-z0-9]/g, "");
-      const normPage = pageLower.replace(/[^a-z0-9]/g, "");
-      if (normPage.includes(normName)) {
+      const normPName = cleanStr(p.productName);
+      if (normPName && normPage.includes(normPName)) {
         return p;
       }
-      
-      // 2. Token overlap score
-      const stopWords = ["of", "and", "or", "in", "with", "for", "the", "a", "an", "pack", "pk", "pcs", "pc"];
-      const tokens = nameLower
-        .split(/[^a-z0-9]+/)
-        .filter(t => t.length > 0 && !stopWords.includes(t));
-        
-      if (tokens.length === 0) continue;
-      
-      let matchedCount = 0;
-      for (const token of tokens) {
-        if (pageLower.includes(token)) {
-          matchedCount++;
+    }
+
+    // 2. Extract Key Features from Label Text:
+    // (A) Product Family
+    const isNetBra = /\b(?:net\s*bra|netbra|net)\b/i.test(pageLower) || /\bnb\b/i.test(pageLower);
+    const isAirBra = /\b(?:air\s*bra|airbra)\b/i.test(pageLower) || /\bab\b/i.test(pageLower);
+    const isMegical = /\b(?:megical|magical|magic)\b/i.test(pageLower);
+    const isShapewear = /\b(?:shapewear|shape\s*wear|tummy)\b/i.test(pageLower);
+
+    // (B) Pack Count
+    let extractedPack = null;
+    if (/\b(?:pack\s*(?:of)?\s*6|6\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b6pk\b/i.test(pageLower)) {
+      extractedPack = 6;
+    } else if (/\b(?:pack\s*(?:of)?\s*3|3\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b3pk\b/i.test(pageLower)) {
+      extractedPack = 3;
+    } else if (/\b(?:pack\s*(?:of)?\s*2|2\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b2pk\b/i.test(pageLower)) {
+      extractedPack = 2;
+    }
+
+    // (C) Size & Cup (e.g. 34A, 34B, 32A, 28A, 40B, 36A, 38B)
+    let extractedSize = null;
+    const sizeMatch = pageLower.match(/\b(28|30|32|34|36|38|40)\s*([ab])\b/i) || pageLower.match(/\b(28|30|32|34|36|38|40)([ab])\b/i);
+    if (sizeMatch) {
+      extractedSize = `${sizeMatch[1]}${sizeMatch[2].toUpperCase()}`;
+    }
+
+    // (D) Color clues on page/label
+    const hasRuby = /\b(?:ruby|ruby\s*red)\b/i.test(pageLower);
+    const hasDarkPink = /\b(?:dark\s*pink|darkpink|dpk)\b/i.test(pageLower);
+    const hasLightPink = /\b(?:light\s*pink|lightpink|lpk)\b/i.test(pageLower);
+    const hasCream = /\b(?:cream|crm)\b/i.test(pageLower);
+    const hasBlack = /\b(?:black|blk)\b/i.test(pageLower);
+    const hasRed = /\b(?:red)\b/i.test(pageLower) && !hasRuby;
+
+    // Score each product in the catalog
+    let scoredCandidates = [];
+
+    for (const p of productsList) {
+      const pName = p.productName;
+      const pLower = pName.toLowerCase();
+      let score = 0;
+
+      // 1. Check Family
+      const pIsNetBra = /\bnet\b/i.test(pLower);
+      const pIsAirBra = /\bair\b/i.test(pLower);
+      const pIsMegical = /\b(?:megical|magical|magic)\b/i.test(pLower);
+      const pIsShapewear = /\bshapewear\b/i.test(pLower);
+
+      if (isNetBra) {
+        if (pIsNetBra) score += 100;
+        else score -= 1000;
+      }
+      if (isAirBra) {
+        if (pIsAirBra) score += 100;
+        else score -= 1000;
+      }
+      if (isMegical) {
+        if (pIsMegical) score += 100;
+        else score -= 1000;
+      }
+      if (isShapewear) {
+        if (pIsShapewear) score += 100;
+        else score -= 1000;
+      }
+
+      // 2. Check Pack Count
+      const pPack6 = /\b(?:pack\s*(?:of)?\s*6|6\s*pk|6\s*pcs?)\b/i.test(pLower) || /\b6\b/.test(pLower.replace(/\b(28|30|32|34|36|38|40)[ab]?\b/g, ""));
+      const pPack3 = /\b(?:pack\s*(?:of)?\s*3|3\s*pk|3\s*pcs?)\b/i.test(pLower) || /\b3\b/.test(pLower.replace(/\b(28|30|32|34|36|38|40)[ab]?\b/g, ""));
+      const pPack2 = /\b(?:pack\s*(?:of)?\s*2|2\s*pk|2\s*pcs?)\b/i.test(pLower);
+
+      if (extractedPack === 6) {
+        if (pPack6) score += 80;
+        else if (pPack3 || pPack2) score -= 500;
+      } else if (extractedPack === 3) {
+        if (pPack3) score += 80;
+        else if (pPack6 || pPack2) score -= 500;
+      } else if (extractedPack === 2) {
+        if (pPack2) score += 80;
+        else if (pPack6 || pPack3) score -= 500;
+      }
+
+      // 3. Check Size & Cup
+      const pSizeMatch = pName.match(/\b(28|30|32|34|36|38|40)\s*([ABab])\b/i) || pName.match(/\b(28|30|32|34|36|38|40)([ABab])\b/i);
+      const pSize = pSizeMatch ? `${pSizeMatch[1]}${pSizeMatch[2].toUpperCase()}` : null;
+
+      if (extractedSize) {
+        if (pSize === extractedSize) {
+          score += 200;
+        } else if (pSize) {
+          score -= 1000; // STRICT size mismatch!
+        }
+      } else if (pSize) {
+        score -= 30;
+      }
+
+      // 4. Check Colors on Net Bra & Shapewear
+      const pHasRuby = /ruby/i.test(pLower);
+      const pHasDarkPink = /dark\s*pink|darkpink/i.test(pLower);
+      const pHasLightPink = /light\s*pink|lightpink/i.test(pLower);
+      const pHasCream = /cream/i.test(pLower);
+      const pHasBlack = /black/i.test(pLower);
+      const pHasRed = /\bred\b/i.test(pLower) && !pHasRuby;
+
+      if (pHasRuby) {
+        if (hasRuby) score += 100;
+        else score -= 100;
+      }
+      if (pHasDarkPink) {
+        if (hasDarkPink) score += 60;
+        else score -= 40;
+      }
+      if (pHasLightPink) {
+        if (hasLightPink) score += 80;
+        else score -= 60;
+      }
+      if (pHasCream) {
+        if (hasCream) score += 40;
+      }
+      if (pHasBlack) {
+        if (hasBlack) score += 40;
+      }
+      if (pHasRed) {
+        if (hasRed) score += 40;
+      }
+
+      if (isShapewear) {
+        if (hasBlack && hasCream) {
+          if (/black.*cream|cream.*black/i.test(pLower)) score += 100;
+          else score -= 50;
+        } else if (hasBlack) {
+          if (/black/i.test(pLower) && !/cream/i.test(pLower)) score += 100;
+          else score -= 50;
+        } else if (hasCream) {
+          if (/cream/i.test(pLower) && !/black/i.test(pLower)) score += 100;
+          else score -= 50;
         }
       }
-      
-      const score = matchedCount / tokens.length;
-      
-      // 3. Exact quantity mismatch checks (e.g. 3 vs 6)
-      const numbersInCatalog = nameLower.match(/\b\d+\b/g) || [];
-      let numberMismatch = false;
-      for (const num of numbersInCatalog) {
-        const pageNumbers = pageLower.match(/\b\d+\b/g) || [];
-        if (!pageNumbers.includes(num)) {
-          numberMismatch = true;
-          break;
+
+      // General token overlap
+      const tokens = pLower.split(/[^a-z0-9]+/).filter(t => t.length > 1 && !["pack", "of", "the", "and", "in", "bra"].includes(t));
+      for (const tok of tokens) {
+        if (pageLower.includes(tok)) {
+          score += 10;
         }
       }
-      
-      if (numberMismatch) {
-        continue;
-      }
-      
-      if (score > bestScore && score >= 0.5) {
-        bestScore = score;
-        bestProduct = p;
+
+      if (score > 50) {
+        scoredCandidates.push({ product: p, score });
       }
     }
-    
-    return bestProduct;
+
+    scoredCandidates.sort((a, b) => b.score - a.score);
+
+    if (scoredCandidates.length > 0) {
+      return scoredCandidates[0].product;
+    }
+
+    return null;
   };
 
   const extractCourierPartner = (text) => {
@@ -270,64 +443,107 @@ function Ledger() {
     return "Valmo";
   };
 
-  const extractCustomerState = (text, statesList) => {
-    const t = text.toLowerCase().replace(/[^a-z]/g, "");
-    
-    // Find all states mentioned in the text
-    const matchedStates = [];
-    for (const s of statesList) {
-      const stateLower = s.toLowerCase();
-      const normState = stateLower.replace(/[^a-z]/g, "");
-      if (t.includes(normState)) {
-        matchedStates.push(s);
+  const extractCustomerState = (text, statesList = INDIA_STATES) => {
+    if (!text) return "Gujarat";
+
+    // 1. Separate customer section from seller return section
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    let customerLines = [];
+    let isReturnSection = false;
+
+    for (const line of lines) {
+      if (/if\s*undelivered|return\s*to|sold\s*by|seller\s*details/i.test(line)) {
+        isReturnSection = true;
+      }
+      if (!isReturnSection) {
+        customerLines.push(line);
       }
     }
 
-    // If there is any state other than Gujarat, that is the customer's state!
-    const nonGujarat = matchedStates.filter(s => s !== "Gujarat");
-    if (nonGujarat.length > 0) {
-      return nonGujarat[0];
+    const customerText = customerLines.length > 0 ? customerLines.join("\n") : text;
+
+    const stateRegexes = [
+      { state: "Andhra Pradesh", regex: /\b(?:andhra\s*pradesh|andhra|\bap\b)\b/i },
+      { state: "Arunachal Pradesh", regex: /\b(?:arunachal\s*pradesh|arunachal)\b/i },
+      { state: "Assam", regex: /\b(?:assam|\bas\b)\b/i },
+      { state: "Bihar", regex: /\b(?:bihar|\bbr\b)\b/i },
+      { state: "Chandigarh", regex: /\b(?:chandigarh|\bch\b)\b/i },
+      { state: "Chhattisgarh", regex: /\b(?:chhattisgarh|chhatisgarh|chattisgarh|\bcg\b|\bct\b)\b/i },
+      { state: "Goa", regex: /\b(?:goa|\bga\b)\b/i },
+      { state: "Gujarat", regex: /\b(?:gujarat|\bgj\b)\b/i },
+      { state: "Haryana", regex: /\b(?:haryana|\bhr\b)\b/i },
+      { state: "Himachal Pradesh", regex: /\b(?:himachal\s*pradesh|himachal|\bhp\b)\b/i },
+      { state: "Jharkhand", regex: /\b(?:jharkhand|\bjh\b)\b/i },
+      { state: "Karnataka", regex: /\b(?:karnataka|\bka\b)\b/i },
+      { state: "Kerala", regex: /\b(?:kerala|\bkl\b)\b/i },
+      { state: "Madhya Pradesh", regex: /\b(?:madhya\s*pradesh|\bmp\b)\b/i },
+      { state: "Maharashtra", regex: /\b(?:maharashtra|\bmh\b)\b/i },
+      { state: "Manipur", regex: /\b(?:manipur|\bmn\b)\b/i },
+      { state: "Meghalaya", regex: /\b(?:meghalaya|\bml\b)\b/i },
+      { state: "Mizoram", regex: /\b(?:mizoram|\bmz\b)\b/i },
+      { state: "Nagaland", regex: /\b(?:nagaland|\bnl\b)\b/i },
+      { state: "Odisha", regex: /\b(?:odisha|orissa|\bod\b|\bor\b)\b/i },
+      { state: "Punjab", regex: /\b(?:punjab|\bpb\b)\b/i },
+      { state: "Rajasthan", regex: /\b(?:rajasthan|\brj\b)\b/i },
+      { state: "Sikkim", regex: /\b(?:sikkim|\bsk\b)\b/i },
+      { state: "Tamil Nadu", regex: /\b(?:tamil\s*nadu|tamilnadu|\btn\b)\b/i },
+      { state: "Telangana", regex: /\b(?:telangana|telengana|\bts\b)\b/i },
+      { state: "Tripura", regex: /\b(?:tripura|\btr\b)\b/i },
+      { state: "Uttar Pradesh", regex: /\b(?:uttar\s*pradesh|\bup\b)\b/i },
+      { state: "Uttarakhand", regex: /\b(?:uttarakhand|uttaranchal|\buk\b|\but\b)\b/i },
+      { state: "West Bengal", regex: /\b(?:west\s*bengal|bengal|\bwb\b)\b/i },
+      { state: "Delhi", regex: /\b(?:delhi|new\s*delhi|\bdl\b)\b/i },
+      { state: "Jammu & Kashmir", regex: /\b(?:jammu\s*&?\s*kashmir|kashmir|jammu|\bjk\b)\b/i }
+    ];
+
+    // 2. Look for explicit "State: [Name]"
+    const stateFieldMatch = customerText.match(/(?:state|state\s*code|destination\s*state)\s*[:\-\s]*([a-zA-Z\s&]+)/i);
+    if (stateFieldMatch && stateFieldMatch[1]) {
+      const rawState = stateFieldMatch[1].trim();
+      for (const item of stateRegexes) {
+        if (item.regex.test(rawState)) {
+          return item.state;
+        }
+      }
     }
 
-    // If only Gujarat is matched, or if no state is matched (fallback to Gujarat if no other state)
-    if (matchedStates.includes("Gujarat")) {
+    // 3. Look for 6-digit destination pincode in the customer section
+    const pincodeMatches = customerText.match(/\b([1-9][0-9]{5})\b/g) || [];
+    const destPincodes = pincodeMatches.filter(p => p !== "394107");
+    if (destPincodes.length > 0) {
+      const pinState = getStateFromPincode(destPincodes[0]);
+      if (pinState) {
+        return pinState;
+      }
+    }
+
+    // 4. Match full state names with word boundaries in customer lines
+    for (const item of stateRegexes) {
+      if (item.regex.test(customerText)) {
+        return item.state;
+      }
+    }
+
+    // 5. Look for any 6-digit pincode in the entire page text (excluding 394107)
+    const allPins = (text.match(/\b([1-9][0-9]{5})\b/g) || []).filter(p => p !== "394107");
+    if (allPins.length > 0) {
+      const pinState = getStateFromPincode(allPins[0]);
+      if (pinState) {
+        return pinState;
+      }
+    }
+
+    // 6. Non-Gujarat state in full text fallback
+    for (const item of stateRegexes) {
+      if (item.state !== "Gujarat" && item.regex.test(text)) {
+        return item.state;
+      }
+    }
+
+    if (stateRegexes.find(i => i.state === "Gujarat").regex.test(text)) {
       return "Gujarat";
     }
 
-    const abbrevs = {
-      "gj": "Gujarat",
-      "mh": "Maharashtra",
-      "rj": "Rajasthan",
-      "up": "Uttar Pradesh",
-      "dl": "Delhi",
-      "mp": "Madhya Pradesh",
-      "ka": "Karnataka",
-      "tn": "Tamil Nadu",
-      "wb": "West Bengal",
-      "ap": "Andhra Pradesh",
-      "ts": "Telangana",
-      "hr": "Haryana",
-      "pb": "Punjab",
-      "br": "Bihar",
-      "jh": "Jharkhand",
-      "ct": "Chhattisgarh",
-      "or": "Odisha",
-      "kl": "Kerala",
-      "as": "Assam",
-      "jk": "Jammu & Kashmir",
-      "ut": "Uttarakhand",
-      "hp": "Himachal Pradesh",
-      "goa": "Goa"
-    };
-    
-    const stateCodeMatch = text.match(/state\s*(?:code)?\s*[:\-\s]*\b([a-zA-Z]{2})\b/i);
-    if (stateCodeMatch && stateCodeMatch[1]) {
-      const code = stateCodeMatch[1].toLowerCase();
-      if (abbrevs[code]) {
-        return abbrevs[code];
-      }
-    }
-    
     return "Gujarat";
   };
 

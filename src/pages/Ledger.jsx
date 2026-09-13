@@ -331,137 +331,145 @@ function Ledger() {
     return "Gujarat";
   };
 
-  const extractOrderNo = (text) => {
-    const cleanText = text.replace(/\s+/g, "");
+  const extractShopName = (text, shopsList = []) => {
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const inlineMatch = line.match(/if\s*undelivered,?\s*return\s*to:?\s*(.+)/i);
+      if (inlineMatch && inlineMatch[1].trim()) {
+        const candidate = inlineMatch[1].trim().replace(/^[:\-\s]+/, "").split(/[,;\n]/)[0].trim();
+        if (candidate) {
+          const matched = shopsList.find(s => (s.shopName || "").toLowerCase() === candidate.toLowerCase());
+          return matched ? matched.shopName : candidate;
+        }
+      }
+      if (/if\s*undelivered,?\s*return\s*to:?/i.test(line) || /^return\s*to:?/i.test(line)) {
+        if (i + 1 < lines.length) {
+          const candidate = lines[i + 1].trim().split(/[,;\n]/)[0].trim();
+          if (candidate && !candidate.toLowerCase().startsWith("if undelivered") && !candidate.toLowerCase().startsWith("return to")) {
+            const matched = shopsList.find(s => (s.shopName || "").toLowerCase() === candidate.toLowerCase());
+            return matched ? matched.shopName : candidate;
+          }
+        }
+      }
+    }
 
-    // Helper to ensure _1 is appended if missing
+    for (const s of shopsList) {
+      if (s.shopName && s.shopName.trim()) {
+        if (text.toLowerCase().includes(s.shopName.toLowerCase().trim())) {
+          return s.shopName;
+        }
+      }
+    }
+    return "";
+  };
+
+  const extractOrderNo = (text) => {
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
     const ensureSuffix = (val) => {
       if (!val) return "";
       return val.includes("_") ? val : `${val}_1`;
     };
 
-    // 1. Search for any 18-digit number with optional underscore suffix (typical Meesho format)
-    // We do this first because it is extremely specific and unique to Meesho orders, preventing
-    // collisions and greedy matching errors.
-    const match18 = cleanText.match(/(\d{18}(?:_\d+)?)/);
-    if (match18) return ensureSuffix(match18[1]);
-    
-    // 2. Try matching with keywords in normalized text (no spaces)
-    const patterns = [
-      /purchaseorderno\.?[:\s\-]*([0-9_\-\/]+)/i,
-      /orderno\.?[:\s\-]*([0-9_\-\/]+)/i,
-      /orderid[:\s\-]*([0-9_\-\/]+)/i,
-      /order[:\s\-]*([0-9_\-\/]+)/i
-    ];
-    for (const pattern of patterns) {
-      const match = cleanText.match(pattern);
-      if (match && match[1]) {
-        if (match[1].length >= 12) return ensureSuffix(match[1]);
+    // 1. Look for explicit "Order No." or "Purchase Order No." line
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Check line itself having "Order No. 32998..." or "Purchase Order No. 32998..."
+      const matchInline = line.match(/(?:purchase\s*order\s*no\.?|order\s*no\.?|order\s*id)\s*[:\s\-]*([0-9]{15,19}(?:_\d+)?)/i);
+      if (matchInline && matchInline[1]) {
+        return ensureSuffix(matchInline[1]);
+      }
+
+      // Check if current line is "Order No." or "Purchase Order No."
+      if (/^(?:purchase\s*order\s*no\.?|order\s*no\.?|order\s*id)[:\s\-]?$/i.test(line)) {
+        for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+          const nextClean = lines[j].replace(/\s+/g, "");
+          const nextMatch = nextClean.match(/(3\d{14,18}(?:_\d+)?)/);
+          if (nextMatch) {
+            return ensureSuffix(nextMatch[1]);
+          }
+        }
       }
     }
 
-    // 3. Fallback to normal text checks
-    const patternsNormal = [
-      /purchase\s*order\s*no\.?\s*[:\s\-]*([0-9_\-\/]+)/i,
-      /order\s*no\.?\s*[:\s\-]*([0-9_\-\/]+)/i,
-      /order\s*id\s*[:\s\-]*([0-9_\-\/]+)/i,
-      /order\s*[:\s\-]*([0-9_\-\/]+)/i
-    ];
-    for (const pattern of patternsNormal) {
-      const match = text.match(pattern);
-      if (match && match[1]) {
-        if (match[1].length >= 12) return ensureSuffix(match[1]);
-      }
+    // 2. Search each line individually for 18-digit Meesho order numbers (e.g. 329987429074634816_1 or 329987429074634816)
+    for (const line of lines) {
+      const clean = line.replace(/\s+/g, "");
+      const m = clean.match(/(3\d{17}(?:_\d+)?)/);
+      if (m) return ensureSuffix(m[1]);
     }
 
-    // 4. Fallback: Find any 15-digit number starting with 3
-    const any15DigitOrder = cleanText.match(/(3[0-9]{14,17}(?:_[0-9]+)?)/);
-    if (any15DigitOrder) return ensureSuffix(any15DigitOrder[1]);
+    // 3. Search each line individually for any 15-18 digit number starting with 3
+    for (const line of lines) {
+      const clean = line.replace(/\s+/g, "");
+      const m = clean.match(/(3\d{14,17}(?:_\d+)?)/);
+      if (m) return ensureSuffix(m[1]);
+    }
 
     return "";
   };
 
-  const extractAwbId = (text, orderNo) => {
-    // Split by newlines to match inside lines exclusively and avoid cross-line squishing (e.g. "Color" + Order ID)
-    const lines = text.split("\n").map(line => line.trim()).filter(Boolean);
-
-    // 1. Try matching with keywords in individual cleaned lines (no spaces inside the line)
-    const patterns = [
-      /awbno\.?[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
-      /awb[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
-      /trackingno\.?[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
-      /trackingid[:\s\-]*([a-zA-Z0-9_\-\/]+)/i
-    ];
-    for (const line of lines) {
-      const cleanLine = line.replace(/\s+/g, "");
-      for (const pattern of patterns) {
-        const match = cleanLine.match(pattern);
-        if (match && match[1] && match[1] !== orderNo && match[1].length >= 8) {
-          return match[1];
-        }
-      }
-    }
-
-    // 2. Fallback to normal text checks in individual lines
-    const patternsNormal = [
-      /awb\s*no\.?\s*[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
-      /awb\s*[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
-      /tracking\s*no\.?\s*[:\s\-]*([a-zA-Z0-9_\-\/]+)/i,
-      /tracking\s*id\s*[:\s\-]*([a-zA-Z0-9_\-\/]+)/i
-    ];
-    for (const line of lines) {
-      for (const pattern of patternsNormal) {
-        const match = line.match(pattern);
-        if (match && match[1] && match[1] !== orderNo && match[1].length >= 8) {
-          return match[1];
-        }
-      }
-    }
-
-    // 3. Specific carrier formats: Valmo/Shadowfax (alphabetic prefix + 10-15 digits) on a line
-    const valmoPattern = /(VL\d{10,15})/i;
-    const generalAlphaPattern = /([a-zA-Z]{1,4}\d{9,15}[a-zA-Z]{0,4})/;
+  const extractAwbId = (text, orderNo, courier) => {
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
     const orderBase = (orderNo || "").split("_")[0];
 
-    for (const line of lines) {
-      const cleanLine = line.replace(/\s+/g, "");
-      
-      const valmoMatch = cleanLine.match(valmoPattern);
-      if (valmoMatch && valmoMatch[1] && valmoMatch[1] !== orderNo && valmoMatch[1] !== orderBase) {
-        return valmoMatch[1].toUpperCase();
-      }
+    const isValidAwb = (val) => {
+      if (!val) return false;
+      const clean = val.replace(/\s+/g, "");
+      if (!clean) return false;
+      if (clean === orderNo || clean === orderBase || (orderBase && clean.includes(orderBase)) || (orderBase && orderBase.includes(clean))) return false;
+      if (clean.includes("394107") || clean.includes("4512757")) return false; // Return code / facility code
+      if (/^[6-9]\d{9}$/.test(clean)) return false; // 10-digit Indian mobile number
+      if (/^\d{6}$/.test(clean)) return false; // 6-digit Indian pincode
+      if (clean.length < 8) return false;
+      const lower = clean.toLowerCase();
+      if (lower.includes("invoice") || lower.includes("order") || lower.includes("logistics") || lower.includes("reverse") || lower.includes("charge")) return false;
+      return true;
+    };
 
-      const generalAlphaMatch = cleanLine.match(generalAlphaPattern);
-      if (generalAlphaMatch && generalAlphaMatch[1] && generalAlphaMatch[1] !== orderNo && generalAlphaMatch[1] !== orderBase && !orderBase.includes(generalAlphaMatch[1])) {
-        return generalAlphaMatch[1];
+    // 1. Explicit keywords in lines: AWB / Tracking No / Waybill
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const match = line.match(/\b(?:awb(?:\s*no\.?)?|tracking\s*(?:no\.?|id)|waybill)\b\s*[:\s\-]*([a-zA-Z0-9_\-\/]+)/i);
+      if (match && isValidAwb(match[1])) {
+        return match[1];
       }
     }
 
-    // 4. Fallback: Find any 12-to-16 digit/char alphanumeric sequence on a single line (excluding orderNo and mobile numbers)
+    // 2. Specific carrier formats:
+    // Valmo: VL followed by 10-15 digits
     for (const line of lines) {
-      const cleanLine = line.replace(/\s+/g, "");
-      
-      // Match 12-to-16 digit numbers
-      const allNumbers = cleanLine.match(/\d{12,16}/g) || [];
-      for (const num of allNumbers) {
-        if (num !== orderNo && num !== orderBase && !orderBase.includes(num) && !/^[6-9]\d{9}/.test(num)) {
-          return num;
-        }
+      const clean = line.replace(/\s+/g, "");
+      const m = clean.match(/(VL\d{10,15})/i);
+      if (m && isValidAwb(m[1])) return m[1].toUpperCase();
+    }
+
+    // Shadowfax: SF followed by digits + chars (e.g. SF4000508476FPL)
+    for (const line of lines) {
+      const clean = line.replace(/\s+/g, "");
+      const m = clean.match(/(SF[a-zA-Z0-9]{10,16})/i);
+      if (m && isValidAwb(m[1])) return m[1].toUpperCase();
+    }
+
+    // Delhivery / Xpressbees / Ecom Waybills:
+    // Pure 12-to-16 digit numbers on their own line (like 1490841081343832 or 134096137723799)
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const clean = line.replace(/\s+/g, "");
+      if (/^\d{12,16}$/.test(clean) && isValidAwb(clean)) {
+        return clean;
       }
-      
-      // Match general alphanumeric AWB IDs (12 to 16 chars) requiring at least 8 digits to avoid address words
-      const alphaNums = cleanLine.match(/(?=.*\d{8,})[a-zA-Z0-9]{12,16}/g) || [];
-      for (const val of alphaNums) {
-        if (
-          val !== orderNo && 
-          val !== orderBase && 
-          !orderBase.includes(val) && 
-          !/^[6-9]\d{9}/.test(val) && 
-          !val.toLowerCase().includes("order") && 
-          !val.toLowerCase().includes("invoice")
-        ) {
-          return val;
-        }
+    }
+
+    // Alphanumeric AWB (e.g. standard tracking codes with digits and chars)
+    for (const line of lines) {
+      const clean = line.replace(/\s+/g, "");
+      const m = clean.match(/\b([a-zA-Z0-9]{12,16})\b/);
+      if (m && isValidAwb(m[1]) && /\d{6,}/.test(m[1])) {
+        return m[1];
       }
     }
 
@@ -480,33 +488,34 @@ function Ledger() {
   };
 
   const extractOrderDate = (text) => {
-    // Normalize spaces/newlines around dots/dashes
     const normalized = text.replace(/\s*([\.\-\/])\s*/g, "$1");
-    
-    // 1. Look for "order date" and grab nearest date pattern (e.g. DD.MM.YYYY)
-    const lowerText = normalized.toLowerCase();
-    const dateIndex = lowerText.indexOf("order date");
-    if (dateIndex !== -1) {
-      const subText = normalized.slice(dateIndex, dateIndex + 120);
-      const dateMatch = subText.match(/\b(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})\b/);
-      if (dateMatch) {
-        const [_, day, month, year] = dateMatch;
-        const paddedDay = day.padStart(2, "0");
-        const paddedMonth = month.padStart(2, "0");
-        return `${year}-${paddedMonth}-${paddedDay}`;
+    const lines = normalized.split("\n").map(l => l.trim()).filter(Boolean);
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const dateMatchInline = line.match(/(?:order\s*date|invoice\s*date|date)[:\s\-]*\b(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})\b/i);
+      if (dateMatchInline) {
+        const [_, day, month, year] = dateMatchInline;
+        return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      }
+
+      if (/^(?:order\s*date|invoice\s*date|date)$/i.test(line)) {
+        for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+          const nextMatch = lines[j].match(/\b(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})\b/);
+          if (nextMatch) {
+            const [_, day, month, year] = nextMatch;
+            return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+          }
+        }
       }
     }
 
-    // 2. Fallback to any date pattern on the page
-    const dateMatch = normalized.match(/\b(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})\b/);
-    if (dateMatch) {
-      const [_, day, month, year] = dateMatch;
-      const paddedDay = day.padStart(2, "0");
-      const paddedMonth = month.padStart(2, "0");
-      return `${year}-${paddedMonth}-${paddedDay}`;
+    const generalMatch = normalized.match(/\b(\d{1,2})[\.\-\/](\d{1,2})[\.\-\/](\d{4})\b/);
+    if (generalMatch) {
+      const [_, day, month, year] = generalMatch;
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
     }
 
-    // Default to today's date if no date found
     return new Date().toISOString().slice(0, 10);
   };
 
@@ -534,6 +543,7 @@ function Ledger() {
       });
 
       const parsedRows = [];
+      let detectedShopFromPdf = "";
 
       for (let fIdx = 0; fIdx < files.length; fIdx++) {
         const file = files[fIdx];
@@ -551,9 +561,16 @@ function Ledger() {
 
           if (!pageText.trim()) continue;
 
+          if (!detectedShopFromPdf) {
+            const detected = extractShopName(pageText, shops);
+            if (detected) {
+              detectedShopFromPdf = detected;
+            }
+          }
+
           const orderNoMatch = extractOrderNo(pageText);
-          const awbIdMatch = extractAwbId(pageText, orderNoMatch);
           const courier = extractCourierPartner(pageText);
+          const awbIdMatch = extractAwbId(pageText, orderNoMatch, courier);
           const state = extractCustomerState(pageText, INDIA_STATES);
           const qty = extractQuantity(pageText);
           const dateMatch = extractOrderDate(pageText);
@@ -596,6 +613,10 @@ function Ledger() {
 
       if (parsedRows.length === 0) {
         throw new Error("Could not find any readable text/shipping labels in the selected PDF files. Please ensure they are standard digital Meesho shipping label PDFs.");
+      }
+
+      if (detectedShopFromPdf) {
+        setPdfSelectedShop(detectedShopFromPdf);
       }
 
       setParsedOrders(parsedRows);
@@ -2517,13 +2538,14 @@ function Ledger() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--border-color)", textTransform: "uppercase", fontSize: "11px", color: "var(--text-secondary)" }}>
-                    <th style={{ padding: "10px 8px", textAlign: "left", width: "120px" }}>File / Page</th>
+                    <th style={{ padding: "10px 8px", textAlign: "left", width: "110px" }}>File / Page</th>
+                    <th style={{ padding: "10px 8px", textAlign: "left", width: "125px" }}>Date</th>
                     <th style={{ padding: "10px 8px", textAlign: "left", width: "140px" }}>Order ID</th>
                     <th style={{ padding: "10px 8px", textAlign: "left", width: "130px" }}>AWB ID</th>
-                    <th style={{ padding: "10px 8px", textAlign: "left", width: "110px" }}>Courier</th>
-                    <th style={{ padding: "10px 8px", textAlign: "left", width: "130px" }}>State</th>
+                    <th style={{ padding: "10px 8px", textAlign: "left", width: "100px" }}>Courier</th>
+                    <th style={{ padding: "10px 8px", textAlign: "left", width: "120px" }}>State</th>
                     <th style={{ padding: "10px 8px", textAlign: "left" }}>Product Match (Select correct product)</th>
-                    <th style={{ padding: "10px 8px", textAlign: "center", width: "60px" }}>Qty</th>
+                    <th style={{ padding: "10px 8px", textAlign: "center", width: "55px" }}>Qty</th>
                     <th style={{ padding: "10px 8px", textAlign: "center", width: "70px" }}>Status</th>
                     <th style={{ padding: "10px 8px", textAlign: "center", width: "50px" }}></th>
                   </tr>
@@ -2538,175 +2560,183 @@ function Ledger() {
                         }}
                       >
                         <td style={{ padding: "10px 8px", textAlign: "left", color: "var(--text-muted)", fontSize: "11px" }}>{item.fileName ? `${item.fileName} (p.${item.pageNum})` : item.pageNum}</td>
-                      <td style={{ padding: "6px 8px" }}>
-                        <input 
-                          type="text" 
-                          value={item.orderNo} 
-                          onChange={(e) => handleParsedFieldChange(item.tempId, "orderNo", e.target.value)} 
-                          style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
-                        />
-                      </td>
-                      <td style={{ padding: "6px 8px" }}>
-                        <input 
-                          type="text" 
-                          value={item.awbId} 
-                          onChange={(e) => handleParsedFieldChange(item.tempId, "awbId", e.target.value)} 
-                          style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
-                        />
-                      </td>
-                      <td style={{ padding: "6px 8px" }}>
-                        <select 
-                          value={item.courierPartner} 
-                          onChange={(e) => handleParsedFieldChange(item.tempId, "courierPartner", e.target.value)}
-                          style={{ height: "30px", fontSize: "13px", padding: "0 4px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
-                        >
-                          <option value="Valmo">Valmo</option>
-                          <option value="Xpressbees">Xpressbees</option>
-                          <option value="Shadowfax">Shadowfax</option>
-                          <option value="Delhivery">Delhivery</option>
-                          <option value="Ecom">Ecom</option>
-                        </select>
-                      </td>
-                      <td style={{ padding: "6px 8px" }}>
-                        <select 
-                          value={item.customerState} 
-                          onChange={(e) => handleParsedFieldChange(item.tempId, "customerState", e.target.value)}
-                          style={{ height: "30px", fontSize: "13px", padding: "0 4px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
-                        >
-                          {INDIA_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: "6px 8px" }}>
-                        <select 
-                          value={item.productId} 
-                          onChange={(e) => handleParsedProductChange(item.tempId, e.target.value)}
-                          style={{ 
-                            height: "30px", 
-                            fontSize: "13px", 
-                            padding: "0 4px", 
-                            width: "100%",
-                            background: !item.productId ? "rgba(245, 158, 11, 0.05)" : "var(--bg-primary)",
-                            borderColor: !item.productId ? "var(--warning)" : "var(--border-color)",
-                            borderWidth: "1px",
-                            borderStyle: "solid",
-                            borderRadius: "4px",
-                            color: "var(--text-primary)"
-                          }}
-                        >
-                          <option value="">-- UNMATCHED (Please Select) --</option>
-                          {products.map(p => (
-                            <option key={p._id} value={p._id}>{p.productName} (Buy: ₹{p.purchasePrice} | Sell: ₹{p.sellingPrice})</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td style={{ padding: "6px 8px" }}>
-                        <input 
-                          type="number" 
-                          min="1"
-                          value={item.quantity} 
-                          onChange={(e) => handleParsedFieldChange(item.tempId, "quantity", e.target.value)} 
-                          style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", textAlign: "center", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
-                        />
-                      </td>
-                      <td style={{ padding: "10px 8px", textAlign: "center" }}>
-                        {item.isDuplicate ? (
-                          <span 
-                            title={item.duplicateReason}
+                        <td style={{ padding: "6px 8px" }}>
+                          <input 
+                            type="date" 
+                            value={item.date || ""} 
+                            onChange={(e) => handleParsedFieldChange(item.tempId, "date", e.target.value)} 
+                            style={{ height: "30px", fontSize: "12px", padding: "0 4px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                          />
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <input 
+                            type="text" 
+                            value={item.orderNo} 
+                            onChange={(e) => handleParsedFieldChange(item.tempId, "orderNo", e.target.value)} 
+                            style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                          />
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <input 
+                            type="text" 
+                            value={item.awbId} 
+                            onChange={(e) => handleParsedFieldChange(item.tempId, "awbId", e.target.value)} 
+                            style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                          />
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <select 
+                            value={item.courierPartner} 
+                            onChange={(e) => handleParsedFieldChange(item.tempId, "courierPartner", e.target.value)}
+                            style={{ height: "30px", fontSize: "13px", padding: "0 4px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                          >
+                            <option value="Valmo">Valmo</option>
+                            <option value="Xpressbees">Xpressbees</option>
+                            <option value="Shadowfax">Shadowfax</option>
+                            <option value="Delhivery">Delhivery</option>
+                            <option value="Ecom">Ecom</option>
+                          </select>
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <select 
+                            value={item.customerState} 
+                            onChange={(e) => handleParsedFieldChange(item.tempId, "customerState", e.target.value)}
+                            style={{ height: "30px", fontSize: "13px", padding: "0 4px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                          >
+                            {INDIA_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <select 
+                            value={item.productId} 
+                            onChange={(e) => handleParsedProductChange(item.tempId, e.target.value)}
                             style={{ 
-                              background: "rgba(239, 68, 68, 0.15)", 
-                              color: "var(--danger)", 
-                              padding: "2px 6px", 
-                              borderRadius: "4px", 
-                              fontSize: "10px", 
-                              fontWeight: "bold",
-                              display: "inline-block",
-                              maxWidth: "80px",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap"
+                              height: "30px", 
+                              fontSize: "13px", 
+                              padding: "0 4px", 
+                              width: "100%",
+                              background: !item.productId ? "rgba(245, 158, 11, 0.05)" : "var(--bg-primary)",
+                              borderColor: !item.productId ? "var(--warning)" : "var(--border-color)",
+                              borderWidth: "1px",
+                              borderStyle: "solid",
+                              borderRadius: "4px",
+                              color: "var(--text-primary)"
                             }}
                           >
-                            Duplicate
-                          </span>
-                        ) : !item.productId ? (
-                          <span 
-                            style={{ 
-                              background: "rgba(245, 158, 11, 0.15)", 
-                              color: "#b45309", 
-                              padding: "2px 6px", 
-                              borderRadius: "4px", 
-                              fontSize: "10px", 
-                              fontWeight: "bold",
-                              display: "inline-block"
-                            }}
-                          >
-                            No Product
-                          </span>
-                        ) : (
-                          <span 
-                            style={{ 
-                              background: "rgba(34, 197, 94, 0.15)", 
-                              color: "var(--success)", 
-                              padding: "2px 6px", 
-                              borderRadius: "4px", 
-                              fontSize: "10px", 
-                              fontWeight: "bold",
-                              display: "inline-block"
-                            }}
-                          >
-                            Ready
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ padding: "6px 8px", textAlign: "center" }}>
-                        <div style={{ display: "inline-flex", gap: "8px" }}>
-                          <button 
-                            type="button"
-                            onClick={() => setExpandedRawText(expandedRawText === item.tempId ? null : item.tempId)}
-                            style={{ 
-                              background: "none", 
-                              border: "none", 
-                              color: expandedRawText === item.tempId ? "var(--primary)" : "var(--text-muted)", 
-                              cursor: "pointer", 
-                              padding: "4px" 
-                            }}
-                            title="View Extracted Text"
-                          >
-                            <FaSearch size={12} />
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => handleRemoveParsedRow(item.tempId)}
-                            style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", padding: "4px" }}
-                            title="Remove label page"
-                          >
-                            <FaTrash size={12} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {expandedRawText === item.tempId && (
-                      <tr style={{ background: "rgba(255, 255, 255, 0.02)" }}>
-                        <td colSpan="9" style={{ padding: "12px 20px" }}>
-                          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "6px", fontWeight: "bold" }}>
-                            RAW TEXT EXTRACTED FROM FILE: {item.fileName || 'N/A'} (PAGE {item.pageNum}):
+                            <option value="">-- UNMATCHED (Please Select) --</option>
+                            {products.map(p => (
+                              <option key={p._id} value={p._id}>{p.productName} (Buy: ₹{p.purchasePrice} | Sell: ₹{p.sellingPrice})</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <input 
+                            type="number" 
+                            min="1"
+                            value={item.quantity} 
+                            onChange={(e) => handleParsedFieldChange(item.tempId, "quantity", e.target.value)} 
+                            style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", textAlign: "center", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                          />
+                        </td>
+                        <td style={{ padding: "10px 8px", textAlign: "center" }}>
+                          {item.isDuplicate ? (
+                            <span 
+                              title={item.duplicateReason}
+                              style={{ 
+                                background: "rgba(239, 68, 68, 0.15)", 
+                                color: "var(--danger)", 
+                                padding: "2px 6px", 
+                                borderRadius: "4px", 
+                                fontSize: "10px", 
+                                fontWeight: "bold",
+                                display: "inline-block",
+                                maxWidth: "80px",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap"
+                              }}
+                            >
+                              Duplicate
+                            </span>
+                          ) : !item.productId ? (
+                            <span 
+                              style={{ 
+                                background: "rgba(245, 158, 11, 0.15)", 
+                                color: "#b45309", 
+                                padding: "2px 6px", 
+                                borderRadius: "4px", 
+                                fontSize: "10px", 
+                                fontWeight: "bold",
+                                display: "inline-block"
+                              }}
+                            >
+                              No Product
+                            </span>
+                          ) : (
+                            <span 
+                              style={{ 
+                                background: "rgba(34, 197, 94, 0.15)", 
+                                color: "var(--success)", 
+                                padding: "2px 6px", 
+                                borderRadius: "4px", 
+                                fontSize: "10px", 
+                                fontWeight: "bold",
+                                display: "inline-block"
+                              }}
+                            >
+                              Ready
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "center" }}>
+                          <div style={{ display: "inline-flex", gap: "8px" }}>
+                            <button 
+                              type="button"
+                              onClick={() => setExpandedRawText(expandedRawText === item.tempId ? null : item.tempId)}
+                              style={{ 
+                                background: "none", 
+                                border: "none", 
+                                color: expandedRawText === item.tempId ? "var(--primary)" : "var(--text-muted)", 
+                                cursor: "pointer", 
+                                padding: "4px" 
+                              }}
+                              title="View Extracted Text"
+                            >
+                              <FaSearch size={12} />
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => handleRemoveParsedRow(item.tempId)}
+                              style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", padding: "4px" }}
+                              title="Remove label page"
+                            >
+                              <FaTrash size={12} />
+                            </button>
                           </div>
-                          <pre style={{
-                            whiteSpace: "pre-wrap",
-                            background: "var(--bg-primary)",
-                            padding: "10px",
-                            borderRadius: "6px",
-                            fontSize: "11px",
-                            color: "var(--text-secondary)",
-                            maxHeight: "150px",
-                            overflowY: "auto",
-                            border: "1px solid var(--border-color)",
-                            fontFamily: "monospace",
-                            textAlign: "left"
-                          }}>{item.pageText}</pre>
                         </td>
                       </tr>
-                    )}
+                      {expandedRawText === item.tempId && (
+                        <tr style={{ background: "rgba(255, 255, 255, 0.02)" }}>
+                          <td colSpan="10" style={{ padding: "12px 20px" }}>
+                            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "6px", fontWeight: "bold" }}>
+                              RAW TEXT EXTRACTED FROM FILE: {item.fileName || 'N/A'} (PAGE {item.pageNum}):
+                            </div>
+                            <pre style={{
+                              whiteSpace: "pre-wrap",
+                              background: "var(--bg-primary)",
+                              padding: "10px",
+                              borderRadius: "6px",
+                              fontSize: "11px",
+                              color: "var(--text-secondary)",
+                              maxHeight: "150px",
+                              overflowY: "auto",
+                              border: "1px solid var(--border-color)",
+                              fontFamily: "monospace",
+                              textAlign: "left"
+                            }}>{item.pageText}</pre>
+                          </td>
+                        </tr>
+                      )}
                     </Fragment>
                   ))}
                 </tbody>

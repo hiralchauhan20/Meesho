@@ -94,7 +94,7 @@ const orderSchema = new mongoose.Schema(
 
     courierPartner: {
       type: String,
-      default: "Valmo", // Courier options: Valmo, Xpressbees, Shadowfax, Delhivery, Ecom
+      default: "Valmo", // Courier options: Valmo, Xpressbees, Shadowfax, Delhivery
     },
 
     date: {

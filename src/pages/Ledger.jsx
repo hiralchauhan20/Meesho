@@ -441,7 +441,6 @@ function Ledger() {
     if (t.includes("delhivery")) return "Delhivery";
     if (t.includes("shadowfax")) return "Shadowfax";
     if (t.includes("xpressbees") || t.includes("expressbees")) return "Xpressbees";
-    if (t.includes("ecomexpress") || t.includes("ecom")) return "Ecom";
     if (t.includes("valmo")) return "Valmo";
     return "Valmo";
   };
@@ -1737,7 +1736,6 @@ function Ledger() {
               <option value="Xpressbees">Xpressbees</option>
               <option value="Shadowfax">Shadowfax</option>
               <option value="Delhivery">Delhivery</option>
-              <option value="Ecom">Ecom</option>
             </select>
           </div>
 
@@ -1947,7 +1945,6 @@ function Ledger() {
               <option value="Xpressbees">Xpressbees</option>
               <option value="Shadowfax">Shadowfax</option>
               <option value="Delhivery">Delhivery</option>
-              <option value="Ecom">Ecom</option>
             </select>
           </div>
 
@@ -2527,7 +2524,6 @@ function Ledger() {
                     <option value="Xpressbees">Xpressbees</option>
                     <option value="Shadowfax">Shadowfax</option>
                     <option value="Delhivery">Delhivery</option>
-                    <option value="Ecom">Ecom</option>
                   </select>
                 </div>
                 <div className="form-full">
@@ -2813,7 +2809,6 @@ function Ledger() {
                             <option value="Xpressbees">Xpressbees</option>
                             <option value="Shadowfax">Shadowfax</option>
                             <option value="Delhivery">Delhivery</option>
-                            <option value="Ecom">Ecom</option>
                           </select>
                         </td>
                         <td style={{ padding: "6px 8px" }}>

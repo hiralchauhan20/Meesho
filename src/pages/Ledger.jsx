@@ -2604,13 +2604,6 @@ function Ledger() {
                     <option value="Wrong Return">Wrong Return</option>
                   </select>
                 </div>
-                <div className="form-full">
-                  <label>Dispatch Status</label>
-                  <select value={editDispatchStatus} onChange={(e) => setEditDispatchStatus(e.target.value)}>
-                    <option value="Pending">Pending</option>
-                    <option value="Dispatched">Dispatched</option>
-                  </select>
-                </div>
                 {editPaymentStatus === "Wrong Return" && (
                   <div className="form-full">
                     <label>

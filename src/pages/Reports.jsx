@@ -1115,7 +1115,7 @@ function Reports() {
             <select
               value={selectedShop}
               onChange={(e) => setSelectedShop(e.target.value)}
-              style={{ height: "36px", padding: "0 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", width: "auto" }}
+              style={{ height: "38px", padding: "6px 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", width: "auto" }}
             >
               <option value="All">All Shops</option>
               {shops.map((s) => (
@@ -1127,7 +1127,7 @@ function Reports() {
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(Number(e.target.value))}
-              style={{ height: "36px", padding: "0 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", width: "auto" }}
+              style={{ height: "38px", padding: "6px 12px", borderRadius: "8px", fontSize: "13px", fontWeight: "600", width: "auto" }}
             >
               {(availableYears.length > 0 ? availableYears : [new Date().getFullYear()]).map((y) => (
                 <option key={y} value={y}>{y}</option>
@@ -1413,8 +1413,8 @@ function Reports() {
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 style={{
-                  height: "36px",
-                  padding: "0 12px",
+                  height: "38px",
+                  padding: "6px 12px",
                   borderRadius: "8px",
                   fontSize: "12px",
                   fontWeight: "600",
@@ -1439,8 +1439,8 @@ function Reports() {
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
                 style={{
-                  height: "36px",
-                  padding: "0 12px",
+                  height: "38px",
+                  padding: "6px 12px",
                   borderRadius: "8px",
                   fontSize: "12px",
                   fontWeight: "600",

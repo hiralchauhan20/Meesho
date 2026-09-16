@@ -1639,7 +1639,7 @@ function Ledger() {
                   setSearchParams({ shop: val });
                 }
               }}
-              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+              style={{ height: "38px", fontSize: "13px", padding: "6px 12px" }}
             >
               <option value="All">All Shops</option>
               {shops.map((s) => (
@@ -1664,7 +1664,7 @@ function Ledger() {
               placeholder="Filter by Order ID..."
               value={filterOrderNo}
               onChange={(e) => setFilterOrderNo(e.target.value)}
-              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+              style={{ height: "38px", fontSize: "13px", padding: "6px 12px" }}
             />
           </div>
 
@@ -1674,7 +1674,7 @@ function Ledger() {
             <select
               value={filterProduct}
               onChange={(e) => setFilterProduct(e.target.value)}
-              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+              style={{ height: "38px", fontSize: "13px", padding: "6px 12px" }}
             >
               <option value="">All Products</option>
               {products.map((p) => (
@@ -1699,7 +1699,7 @@ function Ledger() {
                 value={filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
                 max={new Date().toISOString().slice(0, 10)}
-                style={{ paddingLeft: "32px", height: "38px", fontSize: "13px" }}
+                style={{ paddingLeft: "32px", paddingRight: "12px", height: "38px", fontSize: "13px" }}
                 title="Filter by Date"
               />
             </div>
@@ -1711,7 +1711,7 @@ function Ledger() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+              style={{ height: "38px", fontSize: "13px", padding: "6px 12px" }}
             >
               <option value="">All Status</option>
               <option value="Pending">Pending</option>
@@ -1729,7 +1729,7 @@ function Ledger() {
             <select
               value={filterCourier}
               onChange={(e) => setFilterCourier(e.target.value)}
-              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+              style={{ height: "38px", fontSize: "13px", padding: "6px 12px" }}
             >
               <option value="">All Couriers</option>
               <option value="Valmo">Valmo</option>
@@ -1745,7 +1745,7 @@ function Ledger() {
             <select
               value={filterCustomerState}
               onChange={(e) => setFilterCustomerState(e.target.value)}
-              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+              style={{ height: "38px", fontSize: "13px", padding: "6px 12px" }}
             >
               <option value="">All States</option>
               {INDIA_STATES.map((s) => (
@@ -2780,7 +2780,7 @@ function Ledger() {
                             type="date" 
                             value={item.date || ""} 
                             onChange={(e) => handleParsedFieldChange(item.tempId, "date", e.target.value)} 
-                            style={{ height: "30px", fontSize: "12px", padding: "0 4px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                            style={{ height: "34px", fontSize: "12px", padding: "4px 8px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           />
                         </td>
                         <td style={{ padding: "6px 8px" }}>
@@ -2788,7 +2788,7 @@ function Ledger() {
                             type="text" 
                             value={item.orderNo} 
                             onChange={(e) => handleParsedFieldChange(item.tempId, "orderNo", e.target.value)} 
-                            style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                            style={{ height: "34px", fontSize: "13px", padding: "4px 8px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           />
                         </td>
                         <td style={{ padding: "6px 8px" }}>
@@ -2796,14 +2796,14 @@ function Ledger() {
                             type="text" 
                             value={item.awbId} 
                             onChange={(e) => handleParsedFieldChange(item.tempId, "awbId", e.target.value)} 
-                            style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                            style={{ height: "34px", fontSize: "13px", padding: "4px 8px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           />
                         </td>
                         <td style={{ padding: "6px 8px" }}>
                           <select 
                             value={item.courierPartner} 
                             onChange={(e) => handleParsedFieldChange(item.tempId, "courierPartner", e.target.value)}
-                            style={{ height: "30px", fontSize: "13px", padding: "0 4px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                            style={{ height: "34px", fontSize: "13px", padding: "4px 8px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           >
                             <option value="Valmo">Valmo</option>
                             <option value="Xpressbees">Xpressbees</option>
@@ -2815,7 +2815,7 @@ function Ledger() {
                           <select 
                             value={item.customerState} 
                             onChange={(e) => handleParsedFieldChange(item.tempId, "customerState", e.target.value)}
-                            style={{ height: "30px", fontSize: "13px", padding: "0 4px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                            style={{ height: "34px", fontSize: "13px", padding: "4px 8px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           >
                             {INDIA_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
@@ -2825,9 +2825,9 @@ function Ledger() {
                             value={item.productId} 
                             onChange={(e) => handleParsedProductChange(item.tempId, e.target.value)}
                             style={{ 
-                              height: "30px", 
+                              height: "34px", 
                               fontSize: "13px", 
-                              padding: "0 4px", 
+                              padding: "4px 8px", 
                               width: "100%",
                               background: !item.productId ? "rgba(245, 158, 11, 0.05)" : "var(--bg-primary)",
                               borderColor: !item.productId ? "var(--warning)" : "var(--border-color)",
@@ -2849,7 +2849,7 @@ function Ledger() {
                             min="1"
                             value={item.quantity} 
                             onChange={(e) => handleParsedFieldChange(item.tempId, "quantity", e.target.value)} 
-                            style={{ height: "30px", fontSize: "13px", padding: "0 6px", width: "100%", textAlign: "center", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
+                            style={{ height: "34px", fontSize: "13px", padding: "4px 8px", width: "100%", textAlign: "center", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           />
                         </td>
                         <td style={{ padding: "10px 8px", textAlign: "center" }}>

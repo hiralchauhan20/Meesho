@@ -138,13 +138,13 @@ body {
 /* Premium Form Elements */
 input, select, textarea {
   width: 100%;
-  padding: 8px 14px;
+  padding: 8px 12px;
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius-sm);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   line-height: normal;
   outline: none;
   box-sizing: border-box;
@@ -152,23 +152,29 @@ input, select, textarea {
 }
 
 select {
-  padding: 0 12px;
   height: 38px;
+  padding: 6px 12px;
   line-height: normal;
   cursor: pointer;
-  appearance: auto;
-  -webkit-appearance: auto;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 select option {
   background-color: var(--bg-secondary);
   color: var(--text-primary);
-  padding: 6px 10px;
+  padding: 8px 12px;
 }
 
 input {
   height: 38px;
+  padding: 8px 12px;
   line-height: normal;
+}
+
+input[type="date"],
+input[type="month"] {
+  padding: 6px 12px;
 }
 
 textarea {

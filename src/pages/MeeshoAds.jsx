@@ -777,7 +777,7 @@ function MeeshoAds() {
                 <select
                   value={filterShop}
                   onChange={(e) => setFilterShop(e.target.value)}
-                  style={{ height: "38px", fontSize: "13px", minWidth: "140px", padding: "0 12px" }}
+                  style={{ height: "38px", fontSize: "13px", minWidth: "140px", padding: "6px 12px" }}
                   title="Filter by Shop"
                 >
                   <option value="All">All Shops</option>
@@ -803,7 +803,7 @@ function MeeshoAds() {
                   placeholder="Search campaigns, shops or notes..."
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  style={{ width: "100%", paddingLeft: "34px", height: "38px", fontSize: "13px" }}
+                  style={{ width: "100%", paddingLeft: "34px", paddingRight: "12px", height: "38px", fontSize: "13px" }}
                 />
               </div>
 
@@ -813,7 +813,7 @@ function MeeshoAds() {
                   type="month" 
                   value={filterMonthYear}
                   onChange={(e) => setFilterMonthYear(e.target.value)}
-                  style={{ height: "38px", fontSize: "13px", width: "140px", padding: "0 10px" }}
+                  style={{ height: "38px", fontSize: "13px", width: "140px", padding: "6px 10px" }}
                   title="Filter by Month"
                 />
               </div>

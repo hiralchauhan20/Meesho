@@ -169,8 +169,7 @@ function Login({ setToken }) {
                     style={{ 
                       width: "100%", 
                       height: "46px", 
-                      padding: "0 14px", 
-                      paddingLeft: "14px",
+                      padding: "10px 14px", 
                       borderRadius: "8px", 
                       border: "1px solid var(--border-color)",
                       background: "var(--bg-secondary)",

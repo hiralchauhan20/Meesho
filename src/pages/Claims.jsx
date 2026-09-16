@@ -327,7 +327,7 @@ function Claims() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+              style={{ height: "38px", fontSize: "13px", padding: "6px 12px" }}
             >
               <option value="">All Statuses</option>
               <option value="Pending">Pending</option>
@@ -341,7 +341,7 @@ function Claims() {
             <select
               value={filterProduct}
               onChange={(e) => setFilterProduct(e.target.value)}
-              style={{ height: "38px", fontSize: "13px", padding: "0 12px" }}
+              style={{ height: "38px", fontSize: "13px", padding: "6px 12px" }}
             >
               <option value="">All Products</option>
               {filterProductsList.map((p) => (
@@ -578,7 +578,7 @@ function Claims() {
                     placeholder="દા.ત. ₹200 (6 માંથી 2 ખોવાયા તો 2 નંગનું નુકસાન)"
                     min="0" 
                     step="0.01" 
-                    style={{ height: "38px", padding: "0 12px" }}
+                    style={{ height: "38px", padding: "6px 12px" }}
                   />
                 </div>
 
@@ -591,7 +591,7 @@ function Claims() {
                       onChange={(e) => setEditClaimAmount(e.target.value)} 
                       min="0" 
                       step="0.01" 
-                      style={{ height: "38px", padding: "0 12px" }}
+                      style={{ height: "38px", padding: "6px 12px" }}
                       required
                     />
                   </div>

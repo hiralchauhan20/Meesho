@@ -277,10 +277,10 @@ function Ledger() {
 
     // 2. Extract Key Features from Label Text:
     // (A) Product Family
-    const isNetBra = /\b(?:net\s*bra|netbra|net)\b/i.test(pageLower) || /\bnb\b/i.test(pageLower);
-    const isAirBra = /\b(?:air\s*bra|airbra|sports?\s*bra|cotton\s*full\s*coverage)\b/i.test(pageLower) || /\bab\b/i.test(pageLower);
     const isMegical = /\b(?:megical|magical|magic)\b/i.test(pageLower);
+    const isNetBra = /\b(?:net\s*bra|netbra|net)\b/i.test(pageLower) || /\bnb\b/i.test(pageLower);
     const isShapewear = /\b(?:shapewear|shape\s*wear|tummy)\b/i.test(pageLower);
+    const isAirBra = !isMegical && !isNetBra && !isShapewear && (/\b(?:air\s*bra|airbra|sports?\s*bra|cotton\s*full\s*coverage)\b/i.test(pageLower) || /\bab\b/i.test(pageLower));
 
     // (B) Pack Count
     let extractedPack = null;
@@ -316,22 +316,22 @@ function Ledger() {
       let score = 0;
 
       // 1. Check Family
+      const pIsMegical = /\b(?:megical|magical|magic)\b/i.test(pLower);
       const pIsNetBra = /\bnet\b/i.test(pLower);
       const pIsAirBra = /\bair\b/i.test(pLower);
-      const pIsMegical = /\b(?:megical|magical|magic)\b/i.test(pLower);
       const pIsShapewear = /\bshapewear\b/i.test(pLower);
 
-      if (isAirBra && !isNetBra) {
-        if (pIsAirBra) score += 200;
+      if (isMegical) {
+        if (pIsMegical) score += 200;
         else score -= 1000;
       } else if (isNetBra) {
         if (pIsNetBra) score += 200;
         else score -= 1000;
-      } else if (isMegical) {
-        if (pIsMegical) score += 200;
-        else score -= 1000;
       } else if (isShapewear) {
         if (pIsShapewear) score += 200;
+        else score -= 1000;
+      } else if (isAirBra) {
+        if (pIsAirBra) score += 200;
         else score -= 1000;
       }
 

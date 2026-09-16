@@ -341,8 +341,16 @@ export const getStockSummary = async (req, res) => {
       const fullPName = ord.productName || ord.productId?.productName;
       if (!fullPName) return;
 
-      // Exclude Cancelled or RTO Returned orders from stock consumption
-      if (ord.paymentStatus === "Cancel" || ord.paymentStatus === "RTO Returned") {
+      const payStatus = (ord.paymentStatus || "").toLowerCase().trim();
+
+      // Exclude Cancel, RTO Returned, and Customer Return orders from stock consumption
+      if (
+        payStatus === "cancel" ||
+        payStatus === "cancelled" ||
+        payStatus === "rto returned" ||
+        payStatus === "rto" ||
+        payStatus === "return"
+      ) {
         return;
       }
 

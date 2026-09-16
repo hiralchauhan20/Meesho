@@ -777,7 +777,7 @@ function MeeshoAds() {
                 <select
                   value={filterShop}
                   onChange={(e) => setFilterShop(e.target.value)}
-                  style={{ height: "34px", fontSize: "13px", minWidth: "140px" }}
+                  style={{ height: "38px", fontSize: "13px", minWidth: "140px", padding: "0 12px" }}
                   title="Filter by Shop"
                 >
                   <option value="All">All Shops</option>
@@ -797,13 +797,13 @@ function MeeshoAds() {
 
               {/* Text Search */}
               <div style={{ position: "relative", flex: 1, minWidth: "160px" }}>
-                <FaSearch style={{ position: "absolute", left: "10px", top: "11px", color: "var(--text-muted)", fontSize: "12px" }} />
+                <FaSearch style={{ position: "absolute", left: "12px", top: "13px", color: "var(--text-muted)", fontSize: "12px" }} />
                 <input 
                   type="text" 
                   placeholder="Search campaigns, shops or notes..."
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  style={{ width: "100%", paddingLeft: "32px", height: "34px", fontSize: "13px" }}
+                  style={{ width: "100%", paddingLeft: "34px", height: "38px", fontSize: "13px" }}
                 />
               </div>
 
@@ -813,7 +813,7 @@ function MeeshoAds() {
                   type="month" 
                   value={filterMonthYear}
                   onChange={(e) => setFilterMonthYear(e.target.value)}
-                  style={{ height: "34px", fontSize: "13px", width: "140px" }}
+                  style={{ height: "38px", fontSize: "13px", width: "140px", padding: "0 10px" }}
                   title="Filter by Month"
                 />
               </div>

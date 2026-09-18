@@ -335,7 +335,7 @@ function Reports() {
       }
 
       if (e.category === "Advertising") {
-        monthlyData[monthKey].adsExpenses += e.amount;
+        monthlyData[monthKey].adsExpenses += (e.amount * 1.18); // Platform ads spend includes 18% GST
       } else {
         monthlyData[monthKey].otherExpenses += e.amount;
       }
@@ -576,7 +576,7 @@ function Reports() {
       if (d.getFullYear() === selectedYear) {
         const mIdx = d.getMonth();
         if (e.category === "Advertising") {
-          data[mIdx].adsExpenses += e.amount;
+          data[mIdx].adsExpenses += (e.amount * 1.18); // Platform ads spend includes 18% GST
         } else {
           data[mIdx].otherExpenses += e.amount;
         }
@@ -674,7 +674,7 @@ function Reports() {
         const dayIdx = d.getDate() - 1;
         if (dayIdx >= 0 && dayIdx < daysInMonth) {
           if (e.category === "Advertising") {
-            data[dayIdx].adsExpenses += Number(e.amount) || 0;
+            data[dayIdx].adsExpenses += ((Number(e.amount) || 0) * 1.18); // Platform ads spend includes 18% GST
           } else {
             data[dayIdx].otherExpenses += Number(e.amount) || 0;
           }

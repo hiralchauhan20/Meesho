@@ -267,10 +267,10 @@ function Ledger() {
     const cleanStr = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     const normPage = cleanStr(pageLower);
 
-    // 1. Direct exact / normalized match
+    // 1. Direct exact match (only if entire normalized string matches)
     for (const p of productsList) {
       const normPName = cleanStr(p.productName);
-      if (normPName && normPage.includes(normPName)) {
+      if (normPName && normPage === normPName) {
         return p;
       }
     }
@@ -279,10 +279,64 @@ function Ledger() {
     // (A) Product Family
     const isMegical = /\b(?:megical|magical|magic)\b/i.test(pageLower);
     const isNetBra = /\b(?:net\s*bra|netbra|net)\b/i.test(pageLower) || /\bnb\b/i.test(pageLower);
-    const isShapewear = /\b(?:shapewear|shape\s*wear|tummy)\b/i.test(pageLower);
+    const isShapewear = /\b(?:shapewear|shape\s*wear|tummy|slimming\s*panties|waist\s*shaper|tucker)\b/i.test(pageLower);
     const isAirBra = !isMegical && !isNetBra && !isShapewear && (/\b(?:air\s*bra|airbra|sports?\s*bra|cotton\s*full\s*coverage)\b/i.test(pageLower) || /\bab\b/i.test(pageLower));
 
-    // (B) Pack Count
+    // (B) Extract Parenthesized / Combo Color Counts (e.g., "(Cream + Cream)", "(Black + Black)", "(Cream + Black)", "(Ruby Red - DarkPink - Red)")
+    const comboColorCounts = {};
+    let comboItemCount = 0;
+
+    const recognizedColors = [
+      { key: "ruby", regex: /\b(?:ruby|ruby\s*red)\b/i },
+      { key: "darkpink", regex: /\b(?:dark\s*pink|darkpink|dpk)\b/i },
+      { key: "lightpink", regex: /\b(?:light\s*pink|lightpink|lpk)\b/i },
+      { key: "cream", regex: /\b(?:cream|crm|c\s*ream)\b/i },
+      { key: "black", regex: /\b(?:black|blk)\b/i },
+      { key: "red", regex: /\b(?:red)\b/i, exclude: /\bruby\b/i },
+      { key: "skin", regex: /\b(?:skin|beige|nude)\b/i },
+      { key: "white", regex: /\b(?:white)\b/i },
+      { key: "grey", regex: /\b(?:grey|gray)\b/i }
+    ];
+
+    const parenMatches = [...pageLower.matchAll(/\(([^)]+)\)|\[([^\]]+)\]/g)];
+    for (const match of parenMatches) {
+      const inside = match[1] || match[2] || "";
+      const parts = inside.split(/[+\/,]|(?:\band\b)|(?:\s*-\s*)/).map(p => p.trim().toLowerCase()).filter(Boolean);
+      
+      let foundInParen = 0;
+      for (const part of parts) {
+        for (const col of recognizedColors) {
+          if (col.regex.test(part) && (!col.exclude || !col.exclude.test(part))) {
+            comboColorCounts[col.key] = (comboColorCounts[col.key] || 0) + 1;
+            foundInParen++;
+            break;
+          }
+        }
+      }
+      if (foundInParen > 1) {
+        comboItemCount = Math.max(comboItemCount, foundInParen);
+      }
+    }
+
+    // Direct text fallback for combo patterns like "cream + cream" or "black + black" if not in brackets
+    if (!comboItemCount) {
+      if (/\b(?:cream|crm|c\s*ream)\s*\+\s*(?:cream|crm|c\s*ream)\b/i.test(pageLower)) {
+        comboColorCounts["cream"] = (comboColorCounts["cream"] || 0) + 2;
+        comboItemCount = 2;
+      } else if (/\b(?:black|blk)\s*\+\s*(?:black|blk)\b/i.test(pageLower)) {
+        comboColorCounts["black"] = (comboColorCounts["black"] || 0) + 2;
+        comboItemCount = 2;
+      } else if (
+        /\b(?:black|blk)\s*(?:\+|and|&)\s*(?:cream|crm|c\s*ream)\b/i.test(pageLower) ||
+        /\b(?:cream|crm|c\s*ream)\s*(?:\+|and|&)\s*(?:black|blk)\b/i.test(pageLower)
+      ) {
+        comboColorCounts["black"] = (comboColorCounts["black"] || 0) + 1;
+        comboColorCounts["cream"] = (comboColorCounts["cream"] || 0) + 1;
+        comboItemCount = 2;
+      }
+    }
+
+    // (C) Pack Count
     let extractedPack = null;
     if (/\b(?:pack\s*(?:of)?\s*6|6\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b6pk\b/i.test(pageLower) || /\b6\s*[-_]\s*[a-z]/i.test(pageLower)) {
       extractedPack = 6;
@@ -290,22 +344,27 @@ function Ledger() {
       extractedPack = 3;
     } else if (/\b(?:pack\s*(?:of)?\s*2|2\s*(?:pack|pk|pcs|pc|set))\b/i.test(pageLower) || /\b2pk\b/i.test(pageLower) || /\b2\s*[-_]\s*[a-z]/i.test(pageLower)) {
       extractedPack = 2;
+    } else if (comboItemCount >= 2) {
+      extractedPack = comboItemCount;
     }
 
-    // (C) Size & Cup (e.g. 34A, 34B, 32A, 28A, 40B, 36A, 38B)
+    // (D) Size & Cup (e.g. 34A, 34B, 32A, 28A, 40B, 36A, 38B)
     let extractedSize = null;
     const sizeMatch = pageLower.match(/\b(28|30|32|34|36|38|40)\s*([ab])\b/i) || pageLower.match(/\b(28|30|32|34|36|38|40)([ab])\b/i);
     if (sizeMatch) {
       extractedSize = `${sizeMatch[1]}${sizeMatch[2].toUpperCase()}`;
     }
 
-    // (D) Color clues on page/label
-    const hasRuby = /\b(?:ruby|ruby\s*red)\b/i.test(pageLower);
-    const hasDarkPink = /\b(?:dark\s*pink|darkpink|dpk)\b/i.test(pageLower);
-    const hasLightPink = /\b(?:light\s*pink|lightpink|lpk)\b/i.test(pageLower);
-    const hasCream = /\b(?:cream|crm)\b/i.test(pageLower);
-    const hasBlack = /\b(?:black|blk)\b/i.test(pageLower);
-    const hasRed = /\b(?:red)\b/i.test(pageLower) && !hasRuby;
+    // (E) Color clues on page/label
+    const hasRuby = (comboColorCounts["ruby"] || 0) > 0 || /\b(?:ruby|ruby\s*red)\b/i.test(pageLower);
+    const hasDarkPink = (comboColorCounts["darkpink"] || 0) > 0 || /\b(?:dark\s*pink|darkpink|dpk)\b/i.test(pageLower);
+    const hasLightPink = (comboColorCounts["lightpink"] || 0) > 0 || /\b(?:light\s*pink|lightpink|lpk)\b/i.test(pageLower);
+    const hasCream = (comboColorCounts["cream"] || 0) > 0 || /\b(?:cream|crm|c\s*ream)\b/i.test(pageLower);
+    const hasBlack = (comboColorCounts["black"] || 0) > 0 || /\b(?:black|blk)\b/i.test(pageLower);
+    const hasRed = ((comboColorCounts["red"] || 0) > 0 || /\b(?:red)\b/i.test(pageLower)) && !hasRuby;
+
+    const creamCount = comboColorCounts["cream"] || (hasCream ? 1 : 0);
+    const blackCount = comboColorCounts["black"] || (hasBlack ? 1 : 0);
 
     // Score each product in the catalog
     let scoredCandidates = [];
@@ -343,7 +402,7 @@ function Ledger() {
       // 2. Check Pack Count
       const pPack6 = /\b(?:pack\s*(?:of)?\s*6|6\s*pk|6\s*pcs?)\b/i.test(pLower) || /\b6\b/.test(pLower.replace(/\b(28|30|32|34|36|38|40)[ab]?\b/g, ""));
       const pPack3 = /\b(?:pack\s*(?:of)?\s*3|3\s*pk|3\s*pcs?)\b/i.test(pLower) || /\b3\b/.test(pLower.replace(/\b(28|30|32|34|36|38|40)[ab]?\b/g, ""));
-      const pPack2 = /\b(?:pack\s*(?:of)?\s*2|2\s*pk|2\s*pcs?)\b/i.test(pLower);
+      const pPack2 = /\b(?:pack\s*(?:of)?\s*2|2\s*pk|2\s*pcs?)\b/i.test(pLower) || /\b2\b/.test(pLower.replace(/\b(28|30|32|34|36|38|40)[ab]?\b/g, ""));
 
       if (extractedPack === 6) {
         if (pPack6) score += 100;
@@ -370,7 +429,7 @@ function Ledger() {
         score -= 100;
       }
 
-      // 4. Check Colors on Net Bra & Shapewear
+      // 4. Check Colors on Net Bra & General Items
       const pHasRuby = /ruby/i.test(pLower);
       const pHasDarkPink = /dark\s*pink|darkpink/i.test(pLower);
       const pHasLightPink = /light\s*pink|lightpink/i.test(pLower);
@@ -378,39 +437,82 @@ function Ledger() {
       const pHasBlack = /black/i.test(pLower);
       const pHasRed = /\bred\b/i.test(pLower) && !pHasRuby;
 
-      if (pHasRuby) {
-        if (hasRuby) score += 100;
-        else score -= 200;
-      }
-      if (pHasDarkPink) {
-        if (hasDarkPink) score += 80;
-        else score -= 150;
-      }
-      if (pHasLightPink) {
-        if (hasLightPink) score += 80;
-        else score -= 150;
-      }
-      if (pHasCream) {
-        if (hasCream) score += 40;
-      }
-      if (pHasBlack) {
-        if (hasBlack) score += 40;
-      }
-      if (pHasRed) {
-        if (hasRed) score += 40;
-        else score -= 100;
+      if (!isShapewear) {
+        if (pHasRuby) {
+          if (hasRuby) score += 100;
+          else score -= 200;
+        }
+        if (pHasDarkPink) {
+          if (hasDarkPink) score += 80;
+          else score -= 150;
+        }
+        if (pHasLightPink) {
+          if (hasLightPink) score += 80;
+          else score -= 150;
+        }
+        if (pHasCream) {
+          if (hasCream) score += 40;
+        }
+        if (pHasBlack) {
+          if (hasBlack) score += 40;
+        }
+        if (pHasRed) {
+          if (hasRed) score += 40;
+          else score -= 100;
+        }
       }
 
+      // 5. Precise Shapewear Color & Pack Matching (handles Cream+Cream, Black+Black, Black+Cream, etc.)
       if (isShapewear) {
-        if (hasBlack && hasCream) {
-          if (/black.*cream|cream.*black/i.test(pLower)) score += 100;
-          else score -= 50;
-        } else if (hasBlack) {
-          if (/black/i.test(pLower) && !/cream/i.test(pLower)) score += 100;
-          else score -= 50;
-        } else if (hasCream) {
-          if (/cream/i.test(pLower) && !/black/i.test(pLower)) score += 100;
-          else score -= 50;
+        const pHasBoth = pHasBlack && pHasCream;
+
+        if (creamCount >= 2 && blackCount === 0) {
+          // Pure Cream Pack of 2 (e.g. Cream + Cream)
+          if (pHasCream && !pHasBlack && pPack2) {
+            score += 600; // Exact match for Shapewear Cream (Pack of 2)
+          } else if (pHasCream && !pHasBlack && !pPack2) {
+            score -= 300; // Penalize single Shapewear Cream
+          } else {
+            score -= 1000;
+          }
+        } else if (blackCount >= 2 && creamCount === 0) {
+          // Pure Black Pack of 2 (e.g. Black + Black)
+          if (pHasBlack && !pHasCream && pPack2) {
+            score += 600; // Exact match for Shapewear Black (Pack of 2)
+          } else if (pHasBlack && !pHasCream && !pPack2) {
+            score -= 300; // Penalize single Shapewear Black
+          } else {
+            score -= 1000;
+          }
+        } else if (creamCount >= 1 && blackCount >= 1) {
+          // Combo of Black and Cream (e.g. Black + Cream, Cream + Black)
+          if (pHasBoth) {
+            score += 600; // Exact match for Shapewear Black and Cream (Pack of 2)
+          } else {
+            score -= 800;
+          }
+        } else if (creamCount === 1 && blackCount === 0) {
+          // Single Cream (Pack of 1)
+          if (pHasCream && !pHasBlack) {
+            if (extractedPack === 2) {
+              score += pPack2 ? 500 : -200;
+            } else {
+              score += pPack2 ? -300 : 500;
+            }
+          } else {
+            score -= 1000;
+          }
+        } else if (blackCount === 1 && creamCount === 0) {
+          // Single Black (Pack of 1)
+          if (pHasBlack && !pHasCream) {
+            if (extractedPack === 2) {
+              score += pPack2 ? 500 : -200;
+            } else {
+              score += pPack2 ? -300 : 500;
+            }
+          } else {
+            score -= 1000;
+          }
         }
       }
 
@@ -1992,7 +2094,9 @@ function Ledger() {
                     <option value="Megical Bra (Pack of 3)" />
                     <option value="Megical Bra (Pack of 6)" />
                     <option value="Shapewear Black" />
+                    <option value="Shapewear Black (Pack of 2)" />
                     <option value="Shapewear Cream" />
+                    <option value="Shapewear Cream (Pack of 2)" />
                     <option value="Shapewear Black and Cream (Pack of 2)" />
                   </>
                 )}

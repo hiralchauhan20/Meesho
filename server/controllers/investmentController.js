@@ -103,12 +103,37 @@ export const bulkDeleteInvestments = async (req, res) => {
   }
 };
 
-// Extract pack multiplier from product name (e.g. "Air Bra (Pack of 3)" -> 3, "Pack of 6" -> 6)
+// Extract pack multiplier from product name (e.g. "Air Bra (Pack of 3)" -> 3, "Pack of 6" -> 6, "(Cream + Cream)" -> 2)
 const getPackMultiplier = (name) => {
   if (!name) return 1;
   const str = name.toLowerCase();
+
+  // 1. Check parenthesized combo like (Cream + Cream) or (Black + Cream) or (Ruby Red - DarkPink - Red)
+  const parenMatches = [...str.matchAll(/\(([^)]+)\)|\[([^\]]+)\]/g)];
+  for (const match of parenMatches) {
+    const content = match[1] || match[2] || "";
+    const segments = content.split(/[+\/,]|(?:\band\b)|(?:\s*-\s*)/).map(s => s.trim()).filter(Boolean);
+    const colorWords = ["black", "cream", "crm", "red", "ruby", "darkpink", "lightpink", "skin", "beige", "nude", "blue", "white", "maroon", "grey", "gray"];
+    const matchedColorsInParen = segments.filter(seg => {
+      const s = seg.toLowerCase().replace(/[^a-z]/g, "");
+      return colorWords.some(c => s.includes(c));
+    });
+    if (matchedColorsInParen.length > 1) {
+      return matchedColorsInParen.length;
+    }
+  }
+
+  // 2. Direct combo patterns like "Cream + Cream" or "Black + Black"
+  if (
+    /\b(?:cream|crm|c\s*ream)\s*\+\s*(?:cream|crm|c\s*ream)\b/i.test(str) ||
+    /\b(?:black|blk)\s*\+\s*(?:black|blk)\b/i.test(str) ||
+    /\b(?:black|blk)\s*(?:\+|and|&)\s*(?:cream|crm|c\s*ream)\b/i.test(str) ||
+    /\b(?:cream|crm|c\s*ream)\s*(?:\+|and|&)\s*(?:black|blk)\b/i.test(str)
+  ) {
+    return 2;
+  }
   
-  // Regex to match "pack of 3", "3 pack", "pack 3", "set of 3", "3 pcs" etc.
+  // 3. Regex to match "pack of 3", "3 pack", "pack 3", "set of 3", "3 pcs" etc.
   const match = str.match(/pack\s*of\s*(\d+)|(\d+)\s*pack|pack\s*(\d+)|set\s*of\s*(\d+)|(\d+)\s*pcs/i);
   if (match) {
     const num = match[1] || match[2] || match[3] || match[4] || match[5];
@@ -151,15 +176,29 @@ const normalizeKey = (str) => {
     return "airbra";
   }
 
-  // Shapewear items MUST contain shape/wear/body
-  if (cleaned.includes("shape") || cleaned.includes("wear") || cleaned.includes("body")) {
-    if (cleaned.includes("blackandcream") || (cleaned.includes("black") && cleaned.includes("cream"))) {
+  // Shapewear items MUST contain shape/wear/body/tummy/slimming/panties/shaper
+  if (
+    cleaned.includes("shape") ||
+    cleaned.includes("wear") ||
+    cleaned.includes("body") ||
+    cleaned.includes("tummy") ||
+    cleaned.includes("slimming") ||
+    cleaned.includes("panties") ||
+    cleaned.includes("shaper") ||
+    cleaned.includes("tucker")
+  ) {
+    if (
+      cleaned.includes("blackandcream") ||
+      (cleaned.includes("black") && cleaned.includes("cream")) ||
+      str.match(/black\s*(?:\+|and|&)\s*cream/i) ||
+      str.match(/cream\s*(?:\+|and|&)\s*black/i)
+    ) {
       return "shapewearblackandcream";
     }
     if (cleaned.includes("black")) {
       return "shapewearblack";
     }
-    if (cleaned.includes("cream")) {
+    if (cleaned.includes("cream") || cleaned.includes("crm")) {
       return "shapewearcream";
     }
     return "shapewearblack";

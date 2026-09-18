@@ -293,30 +293,45 @@ function MeeshoAds() {
       ? totalThisMonth / entriesCountThisMonth 
       : 0;
 
-    // Convert breakdown map to sorted list
+    // Convert breakdown map to sorted list with 18% GST
     const monthlyList = Object.values(monthlyBreakdownMap).sort((a, b) => {
       return new Date(b.monthStr) - new Date(a.monthStr);
     }).map(m => {
       const totalMonthOrders = m.ordersCountSum;
+      const baseTotal = m.total;
+      const gstAmount = baseTotal * 0.18;
+      const totalWithGst = baseTotal * 1.18;
 
       return {
         ...m,
+        baseTotal,
+        gstAmount,
+        totalWithGst,
         ordersCount: totalMonthOrders,
-        avg: totalMonthOrders > 0 ? m.total / totalMonthOrders : 0
+        avgWithGst: totalMonthOrders > 0 ? totalWithGst / totalMonthOrders : 0,
+        avg: totalMonthOrders > 0 ? totalWithGst / totalMonthOrders : 0,
+        baseAvg: totalMonthOrders > 0 ? baseTotal / totalMonthOrders : 0
       };
     });
 
     return {
       totalThisMonth,
+      totalThisMonthWithGst: totalThisMonth * 1.18,
+      gstThisMonth: totalThisMonth * 0.18,
       avgDailyThisMonth,
+      avgDailyThisMonthWithGst: avgDailyThisMonth * 1.18,
       totalLastMonth,
+      totalLastMonthWithGst: totalLastMonth * 1.18,
+      gstLastMonth: totalLastMonth * 0.18,
       totalAllTime,
+      totalAllTimeWithGst: totalAllTime * 1.18,
+      gstAllTime: totalAllTime * 0.18,
       monthlyList,
       monthlyBreakdownMap
     };
   }, [ads, orders, filterShop]);
 
-  // Shop-wise Breakdown list
+  // Shop-wise Breakdown list with 18% GST
   const shopBreakdownList = useMemo(() => {
     const map = {};
     shops.forEach(s => {
@@ -460,9 +475,9 @@ function MeeshoAds() {
             <span className="stat-card-title">This Month's Ads</span>
             <div className="stat-card-icon"><FaCoins /></div>
           </div>
-          <div className="stat-card-value">₹{stats.totalThisMonth.toLocaleString("en-IN")}</div>
+          <div className="stat-card-value">₹{stats.totalThisMonthWithGst.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</div>
           <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-            {filterShop === "All" ? "Total for current month (All Shops)" : `Current month for ${filterShop}`}
+            Base: ₹{stats.totalThisMonth.toLocaleString("en-IN")} + 18% GST (₹{stats.gstThisMonth.toLocaleString("en-IN", { maximumFractionDigits: 1 })})
           </div>
         </div>
 
@@ -471,8 +486,10 @@ function MeeshoAds() {
             <span className="stat-card-title">Daily Average</span>
             <div className="stat-card-icon"><FaCalculator /></div>
           </div>
-          <div className="stat-card-value">₹{stats.avgDailyThisMonth.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</div>
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Spent per logged day entry</div>
+          <div className="stat-card-value">₹{stats.avgDailyThisMonthWithGst.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</div>
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+            Base: ₹{stats.avgDailyThisMonth.toLocaleString("en-IN", { maximumFractionDigits: 1 })}/day + 18% GST
+          </div>
         </div>
 
         <div className="stat-card" style={{ "--card-accent": "var(--warning)" }}>
@@ -480,8 +497,10 @@ function MeeshoAds() {
             <span className="stat-card-title">Last Month's Ads</span>
             <div className="stat-card-icon"><FaChartLine /></div>
           </div>
-          <div className="stat-card-value">₹{stats.totalLastMonth.toLocaleString("en-IN")}</div>
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Total for previous month</div>
+          <div className="stat-card-value">₹{stats.totalLastMonthWithGst.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</div>
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+            Base: ₹{stats.totalLastMonth.toLocaleString("en-IN")} + 18% GST (₹{stats.gstLastMonth.toLocaleString("en-IN", { maximumFractionDigits: 1 })})
+          </div>
         </div>
 
         <div className="stat-card" style={{ "--card-accent": "var(--success)" }}>
@@ -489,8 +508,10 @@ function MeeshoAds() {
             <span className="stat-card-title">All-Time Ads Cost</span>
             <div className="stat-card-icon"><FaCoins /></div>
           </div>
-          <div className="stat-card-value">₹{stats.totalAllTime.toLocaleString("en-IN")}</div>
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Grand total of all logged ads</div>
+          <div className="stat-card-value">₹{stats.totalAllTimeWithGst.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</div>
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+            Base: ₹{stats.totalAllTime.toLocaleString("en-IN")} + 18% GST (₹{stats.gstAllTime.toLocaleString("en-IN", { maximumFractionDigits: 1 })})
+          </div>
         </div>
       </div>
 
@@ -564,6 +585,23 @@ function MeeshoAds() {
                   step="0.01"
                   style={{ width: "100%", height: "38px" }}
                 />
+                {amount && Number(amount) > 0 && (
+                  <div style={{
+                    fontSize: "12px",
+                    color: "var(--primary)",
+                    marginTop: "6px",
+                    fontWeight: "600",
+                    background: "rgba(99, 102, 241, 0.1)",
+                    border: "1px solid rgba(99, 102, 241, 0.2)",
+                    padding: "6px 10px",
+                    borderRadius: "6px",
+                    display: "flex",
+                    justifyContent: "space-between"
+                  }}>
+                    <span>✨ Total with 18% GST: <strong>₹{(Number(amount) * 1.18).toFixed(2)}</strong></span>
+                    <span style={{ color: "var(--text-secondary)", fontSize: "11px" }}>Base: ₹{amount} + GST: ₹{(Number(amount) * 0.18).toFixed(2)}</span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -664,14 +702,14 @@ function MeeshoAds() {
                           </span>
                         </div>
                         <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "3px" }}>
-                          {s.entriesCount} entries • This Month: ₹{s.totalThisMonth.toLocaleString("en-IN")}
+                          {s.entriesCount} entries • This Month (+GST): <strong style={{ color: "var(--primary)" }}>₹{(s.totalThisMonth * 1.18).toLocaleString("en-IN", { maximumFractionDigits: 1 })}</strong> (Base: ₹{s.totalThisMonth.toLocaleString("en-IN")})
                         </div>
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontWeight: "800", fontSize: "15px", color: "var(--danger)" }}>
-                          ₹{s.totalAllTime.toLocaleString("en-IN")}
+                          ₹{(s.totalAllTime * 1.18).toLocaleString("en-IN", { maximumFractionDigits: 1 })}
                         </div>
-                        <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>Total Spent</div>
+                        <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>Total (+18% GST)</div>
                       </div>
                     </div>
                   );
@@ -691,9 +729,22 @@ function MeeshoAds() {
               boxShadow: "var(--glass-shadow)"
             }}
           >
-            <h3 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "16px", color: "var(--text-primary)" }}>
-              Monthly Ads Summary
-            </h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ fontSize: "16px", fontWeight: "600", margin: 0, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                <FaCalendarAlt style={{ color: "var(--primary)" }} /> Monthly Ads Summary
+              </h3>
+              <span style={{
+                fontSize: "11px",
+                fontWeight: "700",
+                background: "rgba(99, 102, 241, 0.15)",
+                color: "var(--primary)",
+                padding: "2px 8px",
+                borderRadius: "12px",
+                border: "1px solid rgba(99, 102, 241, 0.3)"
+              }}>
+                18% GST Added
+              </span>
+            </div>
             
             {stats.monthlyList.length === 0 ? (
               <div style={{ textAlign: "center", padding: "20px", color: "var(--text-muted)", fontSize: "13px" }}>
@@ -729,15 +780,20 @@ function MeeshoAds() {
                         if (!isCurrentFilter) e.currentTarget.style.background = "var(--bg-primary)";
                       }}
                     >
-                      <span style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)" }}>
-                        {m.monthStr}
-                      </span>
+                      <div>
+                        <span style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-primary)" }}>
+                          {m.monthStr}
+                        </span>
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "3px" }}>
+                          Base: ₹{m.total.toLocaleString("en-IN")} + 18% GST: ₹{m.gstAmount.toLocaleString("en-IN", { maximumFractionDigits: 1 })}
+                        </div>
+                      </div>
                       <div style={{ textAlign: "right" }}>
-                        <span style={{ fontWeight: "700", fontSize: "14px", color: "var(--primary)" }}>
-                          ₹{m.total.toLocaleString("en-IN")}
+                        <span style={{ fontWeight: "800", fontSize: "15px", color: "var(--primary)" }}>
+                          ₹{m.totalWithGst.toLocaleString("en-IN", { maximumFractionDigits: 1 })}
                         </span>
                         <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "2px" }}>
-                          {m.entries} entries • Orders: {m.ordersCount} • Avg: ₹{m.avg.toLocaleString("en-IN", { maximumFractionDigits: 2 })}/order
+                          {m.entries} entries • Orders: {m.ordersCount} {m.ordersCount > 0 && `• Avg: ₹${m.avgWithGst.toLocaleString("en-IN", { maximumFractionDigits: 2 })}/order`}
                         </div>
                       </div>
                     </div>
@@ -855,7 +911,8 @@ function MeeshoAds() {
                     <tr style={{ borderBottom: "1px solid var(--border-color)", textAlign: "left" }}>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Date</th>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Shop Account</th>
-                      <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Spend (₹)</th>
+                      <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Base Spend (₹)</th>
+                      <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Total (+18% GST)</th>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Spend / Order (₹)</th>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>Note</th>
                       <th style={{ padding: "10px 8px", fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textAlign: "right" }}>Actions</th>
@@ -879,7 +936,8 @@ function MeeshoAds() {
                       const noteMatch = ad.note && ad.note.match(/(\d+)\s*order/i);
                       const ordersCount = noteMatch ? parseInt(noteMatch[1], 10) : dbOrdersCount;
                       
-                      const avgPerOrder = ordersCount > 0 ? ad.amount / ordersCount : 0;
+                      const adTotalWithGst = (ad.amount || 0) * 1.18;
+                      const avgPerOrderWithGst = ordersCount > 0 ? adTotalWithGst / ordersCount : 0;
                       const sObj = shops.find(s => s.shopName === ad.shopName);
                       const pStyle = getPlatformStyle(ad.platform || sObj?.platform);
 
@@ -904,11 +962,19 @@ function MeeshoAds() {
                               </span>
                             </div>
                           </td>
-                          <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--danger)", fontWeight: "700" }}>
+                          <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }}>
                             ₹{ad.amount.toLocaleString("en-IN")}
                           </td>
+                          <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--danger)", fontWeight: "700" }}>
+                            ₹{adTotalWithGst.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                          </td>
                           <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--primary)", fontWeight: "600" }}>
-                            {ordersCount > 0 ? `₹${avgPerOrder.toFixed(2)}` : "-"}
+                            {ordersCount > 0 ? (
+                              <div>
+                                <span>₹{avgPerOrderWithGst.toFixed(2)}</span>
+                                <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>{ordersCount} orders (incl. GST)</div>
+                              </div>
+                            ) : "-"}
                           </td>
                           <td style={{ padding: "12px 8px", fontSize: "13px", color: "var(--text-secondary)", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ad.note}>
                             {ad.note || <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>No details</span>}
@@ -1000,6 +1066,23 @@ function MeeshoAds() {
                     step="0.01"
                     style={{ width: "100%", height: "38px" }}
                   />
+                  {editAmount && Number(editAmount) > 0 && (
+                    <div style={{
+                      fontSize: "12px",
+                      color: "var(--primary)",
+                      marginTop: "6px",
+                      fontWeight: "600",
+                      background: "rgba(99, 102, 241, 0.1)",
+                      border: "1px solid rgba(99, 102, 241, 0.2)",
+                      padding: "6px 10px",
+                      borderRadius: "6px",
+                      display: "flex",
+                      justifyContent: "space-between"
+                    }}>
+                      <span>✨ Total with 18% GST: <strong>₹{(Number(editAmount) * 1.18).toFixed(2)}</strong></span>
+                      <span style={{ color: "var(--text-secondary)", fontSize: "11px" }}>Base: ₹{editAmount} + GST: ₹{(Number(editAmount) * 0.18).toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>

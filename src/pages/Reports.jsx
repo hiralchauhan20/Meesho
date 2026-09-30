@@ -21,13 +21,13 @@ const calculateOrderProfit = (o) => {
   const totalPurchaseCost = buyingVal * qtyVal;
 
   if (paymentStatus === "Wrong Return") {
+    const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "")
+      ? Number(o.lossAmount)
+      : 0;
     if (o.claimStatus === "Approved") {
-      const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "")
-        ? Number(o.lossAmount)
-        : 0;
       return claimAmt - 157 - loss;
     }
-    return -157;
+    return -157 - loss;
   }
 
   if (paymentStatus === "Return") {
@@ -35,6 +35,26 @@ const calculateOrderProfit = (o) => {
       return -157 + claimAmt;
     }
     return -157;
+  }
+
+  if (paymentStatus === "Exchange (1 Time)") {
+    const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "")
+      ? Number(o.lossAmount)
+      : 0;
+    if (o.claimStatus === "Approved") {
+      return claimAmt - 157 - loss;
+    }
+    return -157 - loss;
+  }
+
+  if (paymentStatus === "Exchange (2 Times)") {
+    const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "")
+      ? Number(o.lossAmount)
+      : 0;
+    if (o.claimStatus === "Approved") {
+      return claimAmt - 340 - loss;
+    }
+    return -340 - loss;
   }
   
   const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
@@ -256,7 +276,22 @@ function Reports() {
   // Relevant orders filtered by selected shop
   const relevantOrders = useMemo(() => {
     if (!selectedShop || selectedShop === "All") return orders;
-    return orders.filter(o => (o.shopName || "HKC Collection").trim().toLowerCase() === selectedShop.trim().toLowerCase());
+    let targetName = selectedShop;
+    let targetPlatform = null;
+    if (selectedShop.includes("|||")) {
+      const parts = selectedShop.split("|||");
+      targetName = parts[0];
+      targetPlatform = parts[1];
+    }
+    return orders.filter(o => {
+      const sName = (o.shopName || "HKC Collection").trim().toLowerCase();
+      if (sName !== targetName.trim().toLowerCase()) return false;
+      if (targetPlatform && targetPlatform !== "All") {
+        const sPlat = (o.shopPlatform || "Meesho").trim().toLowerCase();
+        if (sPlat !== targetPlatform.trim().toLowerCase()) return false;
+      }
+      return true;
+    });
   }, [orders, selectedShop]);
 
   // Group transactions (Orders) and Expenses by Month
@@ -302,12 +337,18 @@ function Reports() {
       } else if (payStatus === "Return") {
         orderReturnCost = (o.claimStatus === "Approved") ? (157 - claimAmt) : 157;
       } else if (payStatus === "Wrong Return") {
+        const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
         if (o.claimStatus === "Approved") {
-          const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
           orderReturnCost = 157 + loss - claimAmt;
         } else {
-          orderReturnCost = 157;
+          orderReturnCost = 157 + loss;
         }
+      } else if (payStatus === "Exchange (1 Time)") {
+        const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+        orderReturnCost = (o.claimStatus === "Approved") ? (157 + loss - claimAmt) : (157 + loss);
+      } else if (payStatus === "Exchange (2 Times)") {
+        const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+        orderReturnCost = (o.claimStatus === "Approved") ? (340 + loss - claimAmt) : (340 + loss);
       }
       
       monthlyData[monthKey].gst += orderGst;
@@ -318,6 +359,22 @@ function Reports() {
 
     // 2. Process extra expenses
     expenses.forEach((e) => {
+      if (selectedShop && selectedShop !== "All") {
+        let targetName = selectedShop;
+        let targetPlatform = null;
+        if (selectedShop.includes("|||")) {
+          const parts = selectedShop.split("|||");
+          targetName = parts[0];
+          targetPlatform = parts[1];
+        }
+        if (e.shopName && e.shopName.trim().toLowerCase() !== targetName.trim().toLowerCase()) {
+          return;
+        }
+        if (targetPlatform && targetPlatform !== "All" && e.platform && e.platform.trim().toLowerCase() !== targetPlatform.trim().toLowerCase()) {
+          return;
+        }
+      }
+
       const dateObj = new Date(e.date || e.createdAt);
       const monthKey = dateObj.toLocaleString("en-US", { month: "long", year: "numeric" });
       
@@ -555,15 +612,21 @@ function Reports() {
         } else if (payStatus === "Return") {
           data[mIdx].returnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
         } else if (payStatus === "Wrong Return") {
+          const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
           if (o.claimStatus === "Approved") {
-            const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
             data[mIdx].returnCost += (157 + loss - claimAmt);
           } else {
-            data[mIdx].returnCost += 157;
+            data[mIdx].returnCost += (157 + loss);
           }
+        } else if (payStatus === "Exchange (1 Time)") {
+          const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+          data[mIdx].returnCost += (o.claimStatus === "Approved" ? (157 + loss - claimAmt) : (157 + loss));
+        } else if (payStatus === "Exchange (2 Times)") {
+          const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+          data[mIdx].returnCost += (o.claimStatus === "Approved" ? (340 + loss - claimAmt) : (340 + loss));
         }
 
-        if (payStatus === "Return" || payStatus === "Wrong Return") {
+        if (payStatus === "Return" || payStatus === "Wrong Return" || payStatus === "Exchange (1 Time)" || payStatus === "Exchange (2 Times)") {
           data[mIdx].customerReturns += 1;
         } else if (payStatus === "RTO Returned") {
           data[mIdx].rtoReturns += 1;
@@ -651,15 +714,21 @@ function Reports() {
           } else if (payStatus === "Return") {
             data[dayIdx].returnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
           } else if (payStatus === "Wrong Return") {
+            const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
             if (o.claimStatus === "Approved") {
-              const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
               data[dayIdx].returnCost += (157 + loss - claimAmt);
             } else {
-              data[dayIdx].returnCost += 157;
+              data[dayIdx].returnCost += (157 + loss);
             }
+          } else if (payStatus === "Exchange (1 Time)") {
+            const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+            data[dayIdx].returnCost += (o.claimStatus === "Approved" ? (157 + loss - claimAmt) : (157 + loss));
+          } else if (payStatus === "Exchange (2 Times)") {
+            const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+            data[dayIdx].returnCost += (o.claimStatus === "Approved" ? (340 + loss - claimAmt) : (340 + loss));
           }
 
-          if (payStatus === "Return" || payStatus === "Wrong Return") {
+          if (payStatus === "Return" || payStatus === "Wrong Return" || payStatus === "Exchange (1 Time)" || payStatus === "Exchange (2 Times)") {
             data[dayIdx].customerReturns += 1;
           } else if (payStatus === "RTO Returned") {
             data[dayIdx].rtoReturns += 1;
@@ -1119,7 +1188,7 @@ function Reports() {
             >
               <option value="All">All Shops</option>
               {shops.map((s) => (
-                <option key={s._id} value={s.shopName}>
+                <option key={s._id} value={`${s.shopName}|||${s.platform}`}>
                   {s.shopName} ({s.platform})
                 </option>
               ))}

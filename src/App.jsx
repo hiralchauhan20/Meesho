@@ -38,6 +38,13 @@ function App() {
     return savedToken;
   });
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window !== "undefined" && window.innerWidth <= 992) {
+      return false;
+    }
+    const saved = localStorage.getItem("sidebarOpen");
+    return saved !== null ? saved === "true" : true;
+  });
 
   useEffect(() => {
     // Apply theme
@@ -51,6 +58,20 @@ function App() {
 
   const toggleTheme = () => {
     setTheme(prev => (prev === "dark" ? "light" : "dark"));
+  };
+
+  const toggleSidebar = () => {
+    setSidebarOpen(prev => {
+      const next = !prev;
+      if (typeof window !== "undefined" && window.innerWidth > 992) {
+        localStorage.setItem("sidebarOpen", String(next));
+      }
+      return next;
+    });
+  };
+
+  const closeSidebar = () => {
+    setSidebarOpen(false);
   };
 
   const handleLogout = () => {
@@ -79,11 +100,20 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <Sidebar onLogout={handleLogout} />
+    <div className={`app ${sidebarOpen ? "sidebar-open" : "sidebar-closed"}`}>
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={closeSidebar} 
+        onLogout={handleLogout} 
+      />
 
       <div className="content">
-        <Navbar toggleTheme={toggleTheme} theme={theme} />
+        <Navbar 
+          toggleTheme={toggleTheme} 
+          theme={theme} 
+          toggleSidebar={toggleSidebar} 
+          sidebarOpen={sidebarOpen} 
+        />
         
         <div className="main-body animate-fade">
           <Routes>

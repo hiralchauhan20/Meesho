@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
 import { useSearchParams } from "react-router-dom";
-import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice, FaSearch, FaTimes, FaExclamationTriangle, FaCheckCircle, FaBoxes, FaStore, FaTag } from "react-icons/fa";
+import { FaPlus, FaTrash, FaEdit, FaTable, FaFileExport, FaCalendarAlt, FaTruck, FaMapMarkerAlt, FaFileInvoice, FaSearch, FaTimes, FaExclamationTriangle, FaCheckCircle, FaBoxes, FaStore, FaTag, FaExchangeAlt, FaCalculator } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
 import { API_URL } from "../config";
 import { getPlatformStyle } from "./Shops";
@@ -43,19 +43,39 @@ const calculateOrderProfit = (o) => {
   const totalPurchaseCost = purchaseVal * qtyVal;
 
   if (paymentStatus === "Wrong Return") {
+    const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "")
+      ? Number(o.lossAmount)
+      : 0;
     if (o.claimStatus === "Approved") {
-      const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "")
-        ? Number(o.lossAmount)
-        : 0;
       return claimAmt - 157 - loss;
     }
-    return -157;
+    return -157 - loss;
   }
   if (paymentStatus === "Return") {
     if (o.claimStatus === "Approved") {
       return -157 + claimAmt;
     }
     return -157;
+  }
+
+  if (paymentStatus === "Exchange (1 Time)") {
+    const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "")
+      ? Number(o.lossAmount)
+      : 0;
+    if (o.claimStatus === "Approved") {
+      return claimAmt - 157 - loss;
+    }
+    return -157 - loss;
+  }
+
+  if (paymentStatus === "Exchange (2 Times)") {
+    const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "")
+      ? Number(o.lossAmount)
+      : 0;
+    if (o.claimStatus === "Approved") {
+      return claimAmt - 340 - loss;
+    }
+    return -340 - loss;
   }
   
   // Complete state: calculate profit normally
@@ -178,6 +198,14 @@ function Ledger() {
   const [editClaimAmount, setEditClaimAmount] = useState("0");
   const [editLossAmount, setEditLossAmount] = useState("");
 
+  // Exchange / Return Loss Modal States
+  const [lossModalOpen, setLossModalOpen] = useState(false);
+  const [lossModalOrder, setLossModalOrder] = useState(null);
+  const [lossModalStatus, setLossModalStatus] = useState("Exchange (1 Time)");
+  const [lossModalAmount, setLossModalAmount] = useState("");
+  const [lossModalClaimStatus, setLossModalClaimStatus] = useState("No Claim");
+  const [lossModalClaimAmount, setLossModalClaimAmount] = useState("0");
+
   // Custom Modal States
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
@@ -198,6 +226,7 @@ function Ledger() {
   const [pdfParsing, setPdfParsing] = useState(false);
   const [pdfProgress, setPdfProgress] = useState("");
   const [pdfSelectedShop, setPdfSelectedShop] = useState("HKC Collection");
+  const [pdfSelectedPlatform, setPdfSelectedPlatform] = useState("Meesho");
   const [parsedOrders, setParsedOrders] = useState([]);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [expandedRawText, setExpandedRawText] = useState(null);
@@ -937,6 +966,10 @@ function Ledger() {
 
       if (detectedShopFromPdf) {
         setPdfSelectedShop(detectedShopFromPdf);
+        const matched = shops.find(s => s.shopName.toLowerCase() === detectedShopFromPdf.toLowerCase());
+        if (matched) {
+          setPdfSelectedPlatform(matched.platform || "Meesho");
+        }
       }
 
       setParsedOrders(parsedRows);
@@ -1005,8 +1038,11 @@ function Ledger() {
     setPdfParsing(true);
     setPdfProgress(`Saving ${validOrders.length} orders...`);
 
-    const targetShop = shops.find(s => s.shopName === pdfSelectedShop);
-    const targetPlatform = targetShop ? targetShop.platform : "Meesho";
+    const targetShop = shops.find(s => 
+      s.shopName.toLowerCase() === (pdfSelectedShop || "").toLowerCase() &&
+      (s.platform || "Meesho").toLowerCase() === (pdfSelectedPlatform || "Meesho").toLowerCase()
+    ) || shops.find(s => s.shopName.toLowerCase() === (pdfSelectedShop || "").toLowerCase());
+    const targetPlatform = pdfSelectedPlatform || (targetShop ? targetShop.platform : "Meesho");
 
     try {
       const payload = {
@@ -1092,8 +1128,11 @@ function Ledger() {
     setSubmitting(true);
 
     try {
-      const selectedShopObj = shops.find(s => s.shopName === editShopName);
-      const chosenPlatform = selectedShopObj ? selectedShopObj.platform : editShopPlatform;
+      const selectedShopObj = shops.find(s => 
+        s.shopName.toLowerCase() === editShopName.trim().toLowerCase() && 
+        (s.platform || "Meesho").toLowerCase() === (editShopPlatform || "Meesho").toLowerCase()
+      ) || shops.find(s => s.shopName.toLowerCase() === editShopName.trim().toLowerCase());
+      const chosenPlatform = editShopPlatform || (selectedShopObj ? selectedShopObj.platform : "Meesho");
 
       let finalClaimStatus = editClaimStatus;
       if (editPaymentStatus === "Wrong Return" && (!editClaimStatus || editClaimStatus === "No Claim")) {
@@ -1206,19 +1245,31 @@ function Ledger() {
     }
   };
 
-  const handleShopSelect = (selectedShopName) => {
-    setShopName(selectedShopName);
-    const matched = shops.find(s => s.shopName === selectedShopName);
-    if (matched) {
-      setShopPlatform(matched.platform || "Meesho");
+  const handleShopSelect = (selectedCompositeOrName) => {
+    if (selectedCompositeOrName.includes("|||")) {
+      const [sName, sPlat] = selectedCompositeOrName.split("|||");
+      setShopName(sName);
+      setShopPlatform(sPlat);
+    } else {
+      setShopName(selectedCompositeOrName);
+      const matched = shops.find(s => s.shopName === selectedCompositeOrName);
+      if (matched) {
+        setShopPlatform(matched.platform || "Meesho");
+      }
     }
   };
 
-  const handleEditShopSelect = (selectedShopName) => {
-    setEditShopName(selectedShopName);
-    const matched = shops.find(s => s.shopName === selectedShopName);
-    if (matched) {
-      setEditShopPlatform(matched.platform || "Meesho");
+  const handleEditShopSelect = (selectedCompositeOrName) => {
+    if (selectedCompositeOrName.includes("|||")) {
+      const [sName, sPlat] = selectedCompositeOrName.split("|||");
+      setEditShopName(sName);
+      setEditShopPlatform(sPlat);
+    } else {
+      setEditShopName(selectedCompositeOrName);
+      const matched = shops.find(s => s.shopName === selectedCompositeOrName);
+      if (matched) {
+        setEditShopPlatform(matched.platform || "Meesho");
+      }
     }
   };
 
@@ -1315,8 +1366,11 @@ function Ledger() {
     setSubmitting(true);
 
     try {
-      const selectedShopObj = shops.find(s => s.shopName === shopName);
-      const currentPlatform = selectedShopObj ? selectedShopObj.platform : shopPlatform;
+      const selectedShopObj = shops.find(s => 
+        s.shopName.toLowerCase() === shopName.trim().toLowerCase() && 
+        (s.platform || "Meesho").toLowerCase() === (shopPlatform || "Meesho").toLowerCase()
+      ) || shops.find(s => s.shopName.toLowerCase() === shopName.trim().toLowerCase());
+      const currentPlatform = shopPlatform || (selectedShopObj ? selectedShopObj.platform : "Meesho");
 
       const payload = {
         shopName: shopName || "HKC Collection",
@@ -1404,12 +1458,24 @@ function Ledger() {
   };
 
   const handleStatusChange = async (id, newStatus) => {
+    const orderToUpdate = orders.find(o => o._id === id);
+    if (!orderToUpdate) return;
+
+    if (newStatus === "Exchange (1 Time)" || newStatus === "Exchange (2 Times)" || newStatus === "Wrong Return") {
+      setLossModalOrder(orderToUpdate);
+      setLossModalStatus(newStatus);
+      setLossModalAmount(orderToUpdate.lossAmount !== undefined && orderToUpdate.lossAmount !== null && orderToUpdate.lossAmount > 0 ? String(orderToUpdate.lossAmount) : "");
+      setLossModalClaimStatus(orderToUpdate.claimStatus && orderToUpdate.claimStatus !== "No Claim" ? orderToUpdate.claimStatus : (newStatus === "Wrong Return" ? "Pending" : "No Claim"));
+      setLossModalClaimAmount(orderToUpdate.claimAmount !== undefined && orderToUpdate.claimAmount > 0 ? String(orderToUpdate.claimAmount) : "0");
+      setLossModalOpen(true);
+      return;
+    }
+
     try {
-      const orderToUpdate = orders.find(o => o._id === id);
-      const updatePayload = { paymentStatus: newStatus };
-      if (newStatus === "Wrong Return" && (!orderToUpdate?.claimStatus || orderToUpdate?.claimStatus === "No Claim")) {
-        updatePayload.claimStatus = "Pending";
-      }
+      const updatePayload = { 
+        paymentStatus: newStatus,
+        lossAmount: 0
+      };
 
       const res = await fetch(`${API_URL}/api/orders/${id}`, {
         method: "PUT",
@@ -1427,6 +1493,99 @@ function Ledger() {
     } catch (err) {
       showAlert(err.message, "Error");
     }
+  };
+
+  const handleOpenLossModal = (order) => {
+    setLossModalOrder(order);
+    setLossModalStatus(order.paymentStatus || "Exchange (1 Time)");
+    setLossModalAmount(order.lossAmount !== undefined && order.lossAmount !== null && order.lossAmount > 0 ? String(order.lossAmount) : "");
+    setLossModalClaimStatus(order.claimStatus || "No Claim");
+    setLossModalClaimAmount(order.claimAmount !== undefined && order.claimAmount > 0 ? String(order.claimAmount) : "0");
+    setLossModalOpen(true);
+  };
+
+  const handleSaveLossModal = async (e) => {
+    if (e) e.preventDefault();
+    if (!lossModalOrder || submitting) return;
+
+    setSubmitting(true);
+    try {
+      const lossVal = Number(lossModalAmount) >= 0 ? Number(lossModalAmount) : 0;
+      const claimVal = lossModalClaimStatus === "Approved" ? (Number(lossModalClaimAmount) || 0) : 0;
+
+      const updatePayload = {
+        paymentStatus: lossModalStatus,
+        lossAmount: lossVal,
+        claimStatus: lossModalClaimStatus,
+        claimAmount: claimVal
+      };
+
+      const res = await fetch(`${API_URL}/api/orders/${lossModalOrder._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify(updatePayload)
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Failed to update exchange loss details");
+      }
+
+      const data = await res.json();
+      setOrders((prev) => prev.map((o) => (o._id === lossModalOrder._id ? data.order : o)));
+      fetchStockSummary();
+      setLossModalOpen(false);
+      setLossModalOrder(null);
+    } catch (err) {
+      showAlert(err.message, "Error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateExchangeReDispatch = (order) => {
+    if (!order) return;
+
+    let nextOrderNo = (order.orderNo || "").trim();
+    if (nextOrderNo) {
+      if (nextOrderNo.endsWith("-EX1")) {
+        nextOrderNo = nextOrderNo.replace(/-EX1$/, "-EX2");
+      } else if (nextOrderNo.endsWith("-EX2")) {
+        nextOrderNo = nextOrderNo.replace(/-EX2$/, "-EX3");
+      } else if (!nextOrderNo.includes("-EX")) {
+        nextOrderNo = `${nextOrderNo}-EX1`;
+      } else {
+        nextOrderNo = `${nextOrderNo}-EX`;
+      }
+    }
+
+    setOrderNo(nextOrderNo);
+    setAwbId(""); // Reset so they can enter the new tracking AWB
+    setShopName(order.shopName || "HKC Collection");
+    setShopPlatform(order.shopPlatform || "Meesho");
+    setProductName(order.productName || order.productId?.productName || "");
+    setProductId(order.productId?._id || order.productId || "");
+    setPurchasePrice(order.purchasePrice !== undefined ? String(order.purchasePrice) : (order.productId?.purchasePrice ? String(order.productId.purchasePrice) : ""));
+    setSellingPrice(order.sellingPrice !== undefined ? String(order.sellingPrice) : (order.productId?.sellingPrice ? String(order.productId.sellingPrice) : ""));
+    setQuantity(String(order.quantity || "1"));
+    setGst(String(order.gst || order.productId?.gst || "18"));
+    setCourierPartner(order.courierPartner || "Valmo");
+    setCustomerState(order.customerState || "Gujarat");
+
+    // Close the loss modal if open
+    setLossModalOpen(false);
+    setLossModalOrder(null);
+
+    // Scroll smoothly to add entry form
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    showAlert(
+      `🔁 Exchange 2nd Dispatch Pre-filled!\n\nOrder No: ${nextOrderNo}\nProduct: ${order.productName || order.productId?.productName}\n\n👉 Enter the NEW Tracking ID (AWB) from the Meesho exchange label and click "Add Entry to Accounts".`,
+      "Exchange Re-Dispatch"
+    );
   };
 
 
@@ -1490,12 +1649,18 @@ function Ledger() {
       if (payStatus === "Return") {
         totalReturnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
       } else if (payStatus === "Wrong Return") {
+        const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
         if (o.claimStatus === "Approved") {
-          const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
           totalReturnCost += (157 + loss - claimAmt);
         } else {
-          totalReturnCost += 157;
+          totalReturnCost += (157 + loss);
         }
+      } else if (payStatus === "Exchange (1 Time)") {
+        const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+        totalReturnCost += (o.claimStatus === "Approved" ? (157 + loss - claimAmt) : (157 + loss));
+      } else if (payStatus === "Exchange (2 Times)") {
+        const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+        totalReturnCost += (o.claimStatus === "Approved" ? (340 + loss - claimAmt) : (340 + loss));
       }
     });
 
@@ -1546,7 +1711,7 @@ function Ledger() {
       }
       return true;
     });
-  }, [orders, filterShop, filterDate, filterStatus, filterProduct, filterCourier, filterCustomerState, filterOrderNo]);
+  }, [orders, filterShop, filterPlatform, filterDate, filterStatus, filterProduct, filterCourier, filterCustomerState, filterOrderNo]);
 
   // Stats for filtered results
   const filteredStats = useMemo(() => {
@@ -1572,12 +1737,18 @@ function Ledger() {
       if (payStatus === "Return") {
         totalReturnCost += (o.claimStatus === "Approved" ? (157 - claimAmt) : 157);
       } else if (payStatus === "Wrong Return") {
+        const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
         if (o.claimStatus === "Approved") {
-          const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
           totalReturnCost += (157 + loss - claimAmt);
         } else {
-          totalReturnCost += 157;
+          totalReturnCost += (157 + loss);
         }
+      } else if (payStatus === "Exchange (1 Time)") {
+        const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+        totalReturnCost += (o.claimStatus === "Approved" ? (157 + loss - claimAmt) : (157 + loss));
+      } else if (payStatus === "Exchange (2 Times)") {
+        const loss = (o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount !== "") ? Number(o.lossAmount) : 0;
+        totalReturnCost += (o.claimStatus === "Approved" ? (340 + loss - claimAmt) : (340 + loss));
       }
     });
 
@@ -1818,6 +1989,8 @@ function Ledger() {
               <option value="">All Status</option>
               <option value="Pending">Pending</option>
               <option value="Complete">Complete</option>
+              <option value="Exchange (1 Time)">Exchange (1 Time)</option>
+              <option value="Exchange (2 Times)">Exchange (2 Times)</option>
               <option value="Cancel">Cancel</option>
               <option value="RTO Returned">RTO Returned</option>
               <option value="Return">Return</option>
@@ -2003,14 +2176,14 @@ function Ledger() {
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Shop / Account</label>
-            <select value={shopName} onChange={(e) => handleShopSelect(e.target.value)} style={{ width: "100%" }}>
+            <select value={`${shopName}|||${shopPlatform}`} onChange={(e) => handleShopSelect(e.target.value)} style={{ width: "100%" }}>
               {shops.map((s) => (
-                <option key={s._id} value={s.shopName}>
+                <option key={s._id} value={`${s.shopName}|||${s.platform}`}>
                   {s.shopName} ({s.platform})
                 </option>
               ))}
-              {shopName && !shops.some(s => s.shopName === shopName) && (
-                <option value={shopName}>{shopName}</option>
+              {shopName && !shops.some(s => s.shopName === shopName && (s.platform || "Meesho") === shopPlatform) && (
+                <option value={`${shopName}|||${shopPlatform}`}>{shopName} ({shopPlatform})</option>
               )}
             </select>
           </div>
@@ -2397,19 +2570,21 @@ function Ledger() {
                           value={o.paymentStatus || "Pending"} 
                           onChange={(e) => handleStatusChange(o._id, e.target.value)}
                           style={{
-                            padding: "6px 12px",
+                            padding: "6px 10px",
                             borderRadius: "8px",
                             fontSize: "12px",
                             fontWeight: "600",
                             border: "1px solid var(--border-color)",
                             cursor: "pointer",
-                            width: "125px",
+                            width: "145px",
                             backgroundColor: 
                               o.paymentStatus === "Complete" ? "rgba(16, 185, 129, 0.15)" :
                               o.paymentStatus === "Pending" ? "rgba(245, 158, 11, 0.15)" :
                               o.paymentStatus === "RTO Returned" ? "rgba(14, 165, 233, 0.15)" :
                               o.paymentStatus === "Return" ? "rgba(139, 92, 246, 0.15)" :
                               o.paymentStatus === "Wrong Return" ? "rgba(239, 68, 68, 0.2)" :
+                              o.paymentStatus === "Exchange (1 Time)" ? "rgba(249, 115, 22, 0.15)" :
+                              o.paymentStatus === "Exchange (2 Times)" ? "rgba(225, 29, 72, 0.2)" :
                               "rgba(239, 68, 68, 0.15)",
                             color:
                               o.paymentStatus === "Complete" ? "var(--success)" :
@@ -2417,19 +2592,65 @@ function Ledger() {
                               o.paymentStatus === "RTO Returned" ? "var(--info)" :
                               o.paymentStatus === "Return" ? "#a78bfa" :
                               o.paymentStatus === "Wrong Return" ? "var(--danger)" :
+                              o.paymentStatus === "Exchange (1 Time)" ? "#fb923c" :
+                              o.paymentStatus === "Exchange (2 Times)" ? "#f43f5e" :
                               "var(--danger)"
                           }}
                         >
                           <option value="Pending" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Pending</option>
                           <option value="Complete" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Complete</option>
+                          <option value="Exchange (1 Time)" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Exchange (1 Time)</option>
+                          <option value="Exchange (2 Times)" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Exchange (2 Times)</option>
                           <option value="RTO Returned" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>RTO Returned</option>
                           <option value="Cancel" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Cancel</option>
                           <option value="Return" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Return</option>
                           <option value="Wrong Return" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Wrong Return</option>
                         </select>
-                        {o.paymentStatus === "Wrong Return" && o.lossAmount > 0 && (
-                          <div style={{ fontSize: "10px", color: "var(--danger)", marginTop: "2px", fontWeight: "600" }}>
-                            Loss: ₹{o.lossAmount}
+                        {(o.paymentStatus === "Wrong Return" || o.paymentStatus === "Exchange (1 Time)" || o.paymentStatus === "Exchange (2 Times)") && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "4px" }}>
+                            <div 
+                              onClick={() => handleOpenLossModal(o)}
+                              style={{ 
+                                fontSize: "11px", 
+                                color: o.lossAmount > 0 ? "var(--danger)" : "#fb923c", 
+                                fontWeight: "600",
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                backgroundColor: o.lossAmount > 0 ? "rgba(239, 68, 68, 0.12)" : "rgba(249, 115, 22, 0.1)",
+                                border: `1px dashed ${o.lossAmount > 0 ? "rgba(239, 68, 68, 0.35)" : "rgba(249, 115, 22, 0.35)"}`
+                              }}
+                              title="Click to edit product loss amount"
+                            >
+                              <span>{o.lossAmount > 0 ? `Loss: ₹${o.lossAmount}` : `+ Add Loss (₹0)`}</span>
+                              <FaEdit style={{ fontSize: "10px" }} />
+                            </div>
+
+                            {(o.paymentStatus === "Exchange (1 Time)" || o.paymentStatus === "Exchange (2 Times)") && (
+                              <button
+                                type="button"
+                                onClick={() => handleCreateExchangeReDispatch(o)}
+                                style={{
+                                  fontSize: "10px",
+                                  fontWeight: "600",
+                                  background: "rgba(99, 102, 241, 0.1)",
+                                  border: "1px solid rgba(99, 102, 241, 0.3)",
+                                  borderRadius: "4px",
+                                  color: "var(--primary)",
+                                  cursor: "pointer",
+                                  padding: "2px 6px",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "3px"
+                                }}
+                                title="Create 2nd Dispatch Entry / બીજી વાર મોકલેલ પાર્સલની એન્ટ્રી કરો"
+                              >
+                                <FaBoxes style={{ fontSize: "9px" }} /> +2nd Dispatch
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
@@ -2598,14 +2819,14 @@ function Ledger() {
                 </div>
                 <div>
                   <label>Shop / Account</label>
-                  <select value={editShopName} onChange={(e) => handleEditShopSelect(e.target.value)}>
+                  <select value={`${editShopName}|||${editShopPlatform}`} onChange={(e) => handleEditShopSelect(e.target.value)}>
                     {shops.map((s) => (
-                      <option key={s._id} value={s.shopName}>
+                      <option key={s._id} value={`${s.shopName}|||${s.platform}`}>
                         {s.shopName} ({s.platform})
                       </option>
                     ))}
-                    {editShopName && !shops.some(s => s.shopName === editShopName) && (
-                      <option value={editShopName}>{editShopName}</option>
+                    {editShopName && !shops.some(s => s.shopName === editShopName && (s.platform || "Meesho") === editShopPlatform) && (
+                      <option value={`${editShopName}|||${editShopPlatform}`}>{editShopName} ({editShopPlatform})</option>
                     )}
                   </select>
                 </div>
@@ -2702,29 +2923,77 @@ function Ledger() {
                   <select value={editPaymentStatus} onChange={(e) => setEditPaymentStatus(e.target.value)}>
                     <option value="Pending">Pending</option>
                     <option value="Complete">Complete</option>
+                    <option value="Exchange (1 Time)">Exchange (1 Time)</option>
+                    <option value="Exchange (2 Times)">Exchange (2 Times)</option>
                     <option value="RTO Returned">RTO Returned</option>
                     <option value="Cancel">Cancel</option>
                     <option value="Return">Return</option>
                     <option value="Wrong Return">Wrong Return</option>
                   </select>
                 </div>
-                {editPaymentStatus === "Wrong Return" && (
-                  <div className="form-full">
-                    <label>
-                      Product Damage / Loss Amount (₹)
-                      <span style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: "normal", marginLeft: "6px" }}>
-                        (જેટલું નુકસાન થયું હોય તે રકમ - Default: પૂરી ખરીદ કિંમત)
-                      </span>
-                    </label>
-                    <input 
-                      type="number" 
-                      value={editLossAmount} 
-                      onChange={(e) => setEditLossAmount(e.target.value)} 
-                      placeholder="દા.ત. ₹200 (6 માંથી 2 ખોવાયા તો 2 નંગનું નુકસાન)"
-                      min="0" 
-                      step="0.01" 
-                    />
-                  </div>
+                {(editPaymentStatus === "Wrong Return" || editPaymentStatus === "Exchange (1 Time)" || editPaymentStatus === "Exchange (2 Times)") && (
+                  <>
+                    <div className="form-full">
+                      <label>
+                        Product Damage / Loss / Missing Amount (₹)
+                        <span style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: "normal", marginLeft: "6px" }}>
+                          (જો એક્સચેન્જમાં પ્રોડક્ટ ગાયબ/ખોવાઈ હોય તો તે નુકસાનની રકમ લખો)
+                        </span>
+                      </label>
+                      <input 
+                        type="number" 
+                        value={editLossAmount} 
+                        onChange={(e) => setEditLossAmount(e.target.value)} 
+                        placeholder="દા.ત. ₹200 (પ્રોડક્ટ મિસિંગ અથવા ડેમેજ નુકસાન)"
+                        min="0" 
+                        step="0.01" 
+                      />
+                    </div>
+                    {(() => {
+                      const baseCharge = editPaymentStatus === "Exchange (2 Times)" ? 340 : 157;
+                      const lossVal = Number(editLossAmount) || 0;
+                      const claimVal = editClaimStatus === "Approved" ? (Number(editClaimAmount) || 0) : 0;
+                      const netLoss = claimVal - baseCharge - lossVal;
+                      return (
+                        <div className="form-full" style={{
+                          padding: "12px 16px",
+                          background: "rgba(239, 68, 68, 0.06)",
+                          border: "1px dashed rgba(239, 68, 68, 0.35)",
+                          borderRadius: "10px",
+                          marginTop: "2px"
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", fontSize: "12px" }}>
+                            <span style={{ color: "var(--text-secondary)" }}>🚚 Base Shipping Charge ({editPaymentStatus}):</span>
+                            <strong style={{ color: "var(--danger)" }}>-₹{baseCharge.toFixed(2)}</strong>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", fontSize: "12px" }}>
+                            <span style={{ color: "var(--text-secondary)" }}>📦 Product Loss / Damage:</span>
+                            <strong style={{ color: lossVal > 0 ? "var(--danger)" : "var(--text-muted)" }}>-₹{lossVal.toFixed(2)}</strong>
+                          </div>
+                          {editClaimStatus === "Approved" && (
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", fontSize: "12px" }}>
+                              <span style={{ color: "var(--text-secondary)" }}>🛡️ Claim Approved:</span>
+                              <strong style={{ color: "var(--success)" }}>+₹{claimVal.toFixed(2)}</strong>
+                            </div>
+                          )}
+                          <div style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            paddingTop: "8px",
+                            borderTop: "1px solid rgba(239, 68, 68, 0.2)"
+                          }}>
+                            <span style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-primary)" }}>
+                              📉 Net Total Loss (કુલ નુકસાન):
+                            </span>
+                            <strong style={{ fontSize: "14px", fontWeight: "800", color: netLoss >= 0 ? "var(--success)" : "var(--danger)" }}>
+                              ₹{netLoss.toFixed(2)}
+                            </strong>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
                 )}
 
                 <div className="form-full">
@@ -2821,8 +3090,19 @@ function Ledger() {
                   Assign this Batch to Shop:
                 </span>
                 <select
-                  value={pdfSelectedShop}
-                  onChange={(e) => setPdfSelectedShop(e.target.value)}
+                  value={pdfSelectedPlatform ? `${pdfSelectedShop}|||${pdfSelectedPlatform}` : pdfSelectedShop}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.includes("|||")) {
+                      const [sName, sPlat] = val.split("|||");
+                      setPdfSelectedShop(sName);
+                      setPdfSelectedPlatform(sPlat);
+                    } else {
+                      setPdfSelectedShop(val);
+                      const matched = shops.find(s => s.shopName.toLowerCase() === val.toLowerCase());
+                      if (matched) setPdfSelectedPlatform(matched.platform || "Meesho");
+                    }
+                  }}
                   style={{
                     padding: "6px 12px",
                     borderRadius: "8px",
@@ -2834,12 +3114,12 @@ function Ledger() {
                   }}
                 >
                   {shops.map(s => (
-                    <option key={s._id} value={s.shopName}>
+                    <option key={s._id} value={`${s.shopName}|||${s.platform}`}>
                       {s.shopName} ({s.platform})
                     </option>
                   ))}
-                  {pdfSelectedShop && !shops.some(s => s.shopName === pdfSelectedShop) && (
-                    <option value={pdfSelectedShop}>{pdfSelectedShop}</option>
+                  {pdfSelectedShop && !shops.some(s => s.shopName === pdfSelectedShop && (s.platform || "Meesho") === pdfSelectedPlatform) && (
+                    <option value={`${pdfSelectedShop}|||${pdfSelectedPlatform}`}>{pdfSelectedShop} ({pdfSelectedPlatform})</option>
                   )}
                 </select>
               </div>
@@ -3083,6 +3363,448 @@ function Ledger() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Exchange & Return Loss Quick Modal */}
+      {lossModalOpen && lossModalOrder && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(15, 23, 42, 0.75)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 1000,
+          padding: "20px"
+        }}>
+          <div style={{
+            width: "100%",
+            maxWidth: "520px",
+            background: "var(--bg-secondary)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "16px",
+            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)",
+            overflow: "hidden"
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: "18px 24px",
+              background: lossModalStatus === "Exchange (2 Times)" 
+                ? "linear-gradient(135deg, rgba(225, 29, 72, 0.15), rgba(225, 29, 72, 0.05))" 
+                : lossModalStatus === "Wrong Return"
+                ? "linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05))"
+                : "linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(249, 115, 22, 0.05))",
+              borderBottom: "1px solid var(--border-color)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "10px",
+                  backgroundColor: lossModalStatus === "Exchange (2 Times)" 
+                    ? "rgba(225, 29, 72, 0.2)" 
+                    : lossModalStatus === "Wrong Return"
+                    ? "rgba(239, 68, 68, 0.2)"
+                    : "rgba(249, 115, 22, 0.2)",
+                  color: lossModalStatus === "Exchange (2 Times)" 
+                    ? "#f43f5e" 
+                    : lossModalStatus === "Wrong Return"
+                    ? "var(--danger)"
+                    : "#fb923c",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "16px"
+                }}>
+                  <FaExchangeAlt />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>
+                    {lossModalStatus} Loss Details
+                  </h3>
+                  <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: "2px 0 0 0" }}>
+                    એક્સચેન્જમાં થયેલ નુકસાન / લોસ અમાઉન્ટ દાખલ કરો
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => { setLossModalOpen(false); setLossModalOrder(null); }}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px", padding: "4px" }}
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleSaveLossModal} style={{ padding: "20px 24px" }}>
+              {/* Order summary info */}
+              <div style={{
+                background: "var(--bg-primary)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "12px",
+                padding: "12px 16px",
+                marginBottom: "16px",
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "10px",
+                fontSize: "12px"
+              }}>
+                <div style={{ gridColumn: "span 2", fontWeight: "600", color: "var(--text-primary)", borderBottom: "1px solid var(--border-color)", paddingBottom: "6px" }}>
+                  📦 {lossModalOrder.productName || lossModalOrder.productId?.productName || "Product"}
+                </div>
+                <div>
+                  <span style={{ color: "var(--text-muted)", display: "block", fontSize: "11px" }}>Order ID:</span>
+                  <span style={{ fontFamily: "monospace", fontWeight: "600" }}>{lossModalOrder.orderNo || "-"}</span>
+                </div>
+                <div>
+                  <span style={{ color: "var(--text-muted)", display: "block", fontSize: "11px" }}>Tracking (AWB):</span>
+                  <span style={{ fontFamily: "monospace", fontWeight: "600" }}>{lossModalOrder.awbId || "-"}</span>
+                </div>
+                <div>
+                  <span style={{ color: "var(--text-muted)", display: "block", fontSize: "11px" }}>Product Purchase Cost:</span>
+                  <span style={{ fontWeight: "600", color: "var(--text-primary)" }}>
+                    ₹{((lossModalOrder.purchasePrice !== undefined && lossModalOrder.purchasePrice !== null ? lossModalOrder.purchasePrice : (lossModalOrder.productId?.purchasePrice || 0)) * (lossModalOrder.quantity || 1)).toFixed(2)}
+                  </span>
+                </div>
+                <div>
+                  <span style={{ color: "var(--text-muted)", display: "block", fontSize: "11px" }}>Status:</span>
+                  <span style={{
+                    fontWeight: "700",
+                    color: lossModalStatus === "Exchange (2 Times)" ? "#f43f5e" : "#fb923c"
+                  }}>
+                    {lossModalStatus}
+                  </span>
+                </div>
+              </div>
+
+              {/* Base Shipping Charge Alert */}
+              <div style={{
+                background: lossModalStatus === "Exchange (2 Times)" ? "rgba(225, 29, 72, 0.08)" : "rgba(249, 115, 22, 0.08)",
+                border: `1px solid ${lossModalStatus === "Exchange (2 Times)" ? "rgba(225, 29, 72, 0.25)" : "rgba(249, 115, 22, 0.25)"}`,
+                borderRadius: "10px",
+                padding: "10px 14px",
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between"
+              }}>
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  <span>🚚 Base Meesho Courier Charge:</span>
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
+                    {lossModalStatus === "Exchange (2 Times)" ? "2x Exchange Shipping Deduction" : "1x Exchange Shipping Deduction"}
+                  </div>
+                </div>
+                <strong style={{ fontSize: "14px", color: "var(--danger)" }}>
+                  -₹{lossModalStatus === "Exchange (2 Times)" ? "340.00" : "157.00"}
+                </strong>
+              </div>
+
+              {/* Product Loss Input */}
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <label style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>
+                    Product Loss Amount (₹) / પ્રોડક્ટ નુકસાન
+                  </label>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                    (ડેમેજ અથવા ખોવાયેલ પ્રોડક્ટ લોસ)
+                  </span>
+                </div>
+                <div style={{ position: "relative" }}>
+                  <span style={{
+                    position: "absolute",
+                    left: "14px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    fontWeight: "bold",
+                    color: "var(--text-muted)",
+                    fontSize: "14px"
+                  }}>₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={lossModalAmount}
+                    onChange={(e) => setLossModalAmount(e.target.value)}
+                    placeholder="0.00"
+                    autoFocus
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px 10px 30px",
+                      borderRadius: "10px",
+                      border: "1px solid var(--border-color)",
+                      background: "var(--bg-primary)",
+                      color: "var(--text-primary)",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      outline: "none"
+                    }}
+                  />
+                </div>
+
+                {/* Quick Helper Buttons */}
+                {(() => {
+                  const pVal = lossModalOrder.purchasePrice !== undefined && lossModalOrder.purchasePrice !== null ? lossModalOrder.purchasePrice : (lossModalOrder.productId?.purchasePrice || 0);
+                  const qVal = lossModalOrder.quantity || 1;
+                  const totalCost = pVal * qVal;
+                  return (
+                    <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => setLossModalAmount("0")}
+                        style={{
+                          fontSize: "11px",
+                          padding: "4px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--border-color)",
+                          background: lossModalAmount === "0" || lossModalAmount === "" ? "rgba(16, 185, 129, 0.15)" : "var(--bg-primary)",
+                          color: lossModalAmount === "0" || lossModalAmount === "" ? "var(--success)" : "var(--text-secondary)",
+                          cursor: "pointer",
+                          fontWeight: "600"
+                        }}
+                      >
+                        ₹0 (Only Courier Charge)
+                      </button>
+                      {totalCost > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setLossModalAmount(String(totalCost))}
+                            style={{
+                              fontSize: "11px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--border-color)",
+                              background: lossModalAmount === String(totalCost) ? "rgba(239, 68, 68, 0.15)" : "var(--bg-primary)",
+                              color: lossModalAmount === String(totalCost) ? "var(--danger)" : "var(--text-secondary)",
+                              cursor: "pointer",
+                              fontWeight: "600"
+                            }}
+                          >
+                            Full Product Cost (₹{totalCost})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setLossModalAmount(String(Math.round(totalCost / 2)))}
+                            style={{
+                              fontSize: "11px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--border-color)",
+                              background: lossModalAmount === String(Math.round(totalCost / 2)) ? "rgba(249, 115, 22, 0.15)" : "var(--bg-primary)",
+                              color: lossModalAmount === String(Math.round(totalCost / 2)) ? "#fb923c" : "var(--text-secondary)",
+                              cursor: "pointer",
+                              fontWeight: "600"
+                            }}
+                          >
+                            50% Cost (₹{Math.round(totalCost / 2)})
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Platform Claim Status */}
+              <div style={{
+                background: "var(--bg-primary)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "10px",
+                padding: "12px",
+                marginBottom: "16px"
+              }}>
+                <div style={{ display: "grid", gridTemplateColumns: lossModalClaimStatus === "Approved" ? "1fr 1fr" : "1fr", gap: "10px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", marginBottom: "4px" }}>
+                      Platform Claim Status
+                    </label>
+                    <select
+                      value={lossModalClaimStatus}
+                      onChange={(e) => setLossModalClaimStatus(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--border-color)",
+                        background: "var(--bg-secondary)",
+                        color: "var(--text-primary)",
+                        fontSize: "12px",
+                        fontWeight: "600"
+                      }}
+                    >
+                      <option value="No Claim">No Claim</option>
+                      <option value="Pending">Pending Claim</option>
+                      <option value="Approved">Approved</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+                  </div>
+                  {lossModalClaimStatus === "Approved" && (
+                    <div>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", marginBottom: "4px" }}>
+                        Claim Received Amount (₹)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={lossModalClaimAmount}
+                        onChange={(e) => setLossModalClaimAmount(e.target.value)}
+                        placeholder="0.00"
+                        style={{
+                          width: "100%",
+                          padding: "8px 10px",
+                          borderRadius: "8px",
+                          border: "1px solid var(--border-color)",
+                          background: "var(--bg-secondary)",
+                          color: "var(--text-primary)",
+                          fontSize: "12px",
+                          fontWeight: "600"
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Live Net Loss Calculation Box */}
+              {(() => {
+                const baseCharge = lossModalStatus === "Exchange (2 Times)" ? 340 : 157;
+                const enteredLoss = Number(lossModalAmount) || 0;
+                const enteredClaim = lossModalClaimStatus === "Approved" ? (Number(lossModalClaimAmount) || 0) : 0;
+                const netLoss = enteredClaim - baseCharge - enteredLoss;
+
+                return (
+                  <div style={{
+                    padding: "16px",
+                    background: "rgba(239, 68, 68, 0.08)",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    borderRadius: "12px",
+                    marginBottom: "20px"
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", fontSize: "12px" }}>
+                      <span style={{ color: "var(--text-secondary)" }}>Base Shipping Charge:</span>
+                      <strong style={{ color: "var(--danger)" }}>-₹{baseCharge.toFixed(2)}</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", fontSize: "12px" }}>
+                      <span style={{ color: "var(--text-secondary)" }}>Product Damage / Missing Loss:</span>
+                      <strong style={{ color: enteredLoss > 0 ? "var(--danger)" : "var(--text-muted)" }}>
+                        -₹{enteredLoss.toFixed(2)}
+                      </strong>
+                    </div>
+                    {lossModalClaimStatus === "Approved" && (
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", fontSize: "12px" }}>
+                        <span style={{ color: "var(--text-secondary)" }}>Platform Claim Credit:</span>
+                        <strong style={{ color: "var(--success)" }}>+₹{enteredClaim.toFixed(2)}</strong>
+                      </div>
+                    )}
+                    <div style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginTop: "8px",
+                      paddingTop: "10px",
+                      borderTop: "1px dashed rgba(239, 68, 68, 0.3)"
+                    }}>
+                      <div>
+                        <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-primary)", display: "block" }}>
+                          Total Loss (કુલ ચોખ્ખો લોસ):
+                        </span>
+                        <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                          ({lossModalStatus} final impact on ledger)
+                        </span>
+                      </div>
+                      <strong style={{
+                        fontSize: "18px",
+                        fontWeight: "800",
+                        color: netLoss >= 0 ? "var(--success)" : "var(--danger)"
+                      }}>
+                        ₹{netLoss.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </strong>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Re-Dispatch Shortcut Banner in Modal */}
+              {(lossModalStatus === "Exchange (1 Time)" || lossModalStatus === "Exchange (2 Times)") && (
+                <div style={{
+                  background: "rgba(99, 102, 241, 0.08)",
+                  border: "1px dashed rgba(99, 102, 241, 0.35)",
+                  borderRadius: "10px",
+                  padding: "10px 14px",
+                  marginBottom: "16px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "10px"
+                }}>
+                  <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    <span style={{ fontWeight: "600", color: "var(--text-primary)" }}>📦 Need to dispatch 2nd replacement item?</span>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
+                      બીજી વાર રિપ્લેસમેન્ટ પ્રોડક્ટ મોકલવાની એન્ટ્રી કરો ({lossModalOrder.orderNo ? `${lossModalOrder.orderNo}-EX1` : "Re-dispatch"})
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCreateExchangeReDispatch(lossModalOrder)}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: "6px",
+                      background: "var(--primary)",
+                      color: "white",
+                      border: "none",
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "5px"
+                    }}
+                  >
+                    <FaBoxes /> Create 2nd Dispatch
+                  </button>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => { setLossModalOpen(false); setLossModalOrder(null); }}
+                  style={{ height: "42px", padding: "0 18px", borderRadius: "10px" }}
+                >
+                  Cancel (રદ કરો)
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submitting}
+                  style={{
+                    height: "42px",
+                    padding: "0 24px",
+                    borderRadius: "10px",
+                    background: lossModalStatus === "Exchange (2 Times)" ? "linear-gradient(135deg, #e11d48, #be123c)" : "linear-gradient(135deg, #ea580c, #c2410c)",
+                    border: "none",
+                    fontWeight: "700",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
+                  }}
+                >
+                  <FaCalculator />
+                  {submitting ? "Saving..." : "Confirm & Save Loss (સેવ કરો)"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

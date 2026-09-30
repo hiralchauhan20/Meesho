@@ -32,6 +32,7 @@ function MeeshoAds() {
   // Add Form States
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); // Default today
   const [selectedShop, setSelectedShop] = useState("HKC Collection");
+  const [selectedPlatform, setSelectedPlatform] = useState("Meesho");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -40,6 +41,7 @@ function MeeshoAds() {
   const [editingAd, setEditingAd] = useState(null);
   const [editDate, setEditDate] = useState("");
   const [editShopName, setEditShopName] = useState("HKC Collection");
+  const [editPlatform, setEditPlatform] = useState("Meesho");
   const [editAmount, setEditAmount] = useState("");
   const [editNote, setEditNote] = useState("");
   const [updating, setUpdating] = useState(false);
@@ -88,7 +90,8 @@ function MeeshoAds() {
         setShops(dataShops);
         const def = dataShops.find(s => s.isDefault) || dataShops[0];
         if (def) {
-          setSelectedShop(prev => prev || def.shopName);
+          setSelectedShop(def.shopName);
+          setSelectedPlatform(def.platform || "Meesho");
         }
       }
     } catch (err) {
@@ -106,8 +109,12 @@ function MeeshoAds() {
       return;
     }
 
-    const matchedShop = shops.find(s => s.shopName === selectedShop);
-    const platform = matchedShop?.platform || "Meesho";
+    const matchedShop = shops.find(s => 
+      s.shopName.toLowerCase() === selectedShop.trim().toLowerCase() &&
+      (s.platform || "Meesho").toLowerCase() === (selectedPlatform || "Meesho").toLowerCase()
+    );
+    const finalShopName = matchedShop ? matchedShop.shopName : selectedShop.trim();
+    const finalPlatform = matchedShop ? (matchedShop.platform || "Meesho") : (selectedPlatform || "Meesho");
 
     setSaving(true);
     try {
@@ -120,8 +127,8 @@ function MeeshoAds() {
         body: JSON.stringify({
           title: "Platform Ads",
           category: "Advertising",
-          shopName: selectedShop,
-          platform: platform,
+          shopName: finalShopName,
+          platform: finalPlatform,
           amount: Number(amount),
           date: new Date(date).toISOString(),
           note: note.trim()
@@ -148,6 +155,7 @@ function MeeshoAds() {
     setEditingAd(ad);
     setEditDate(new Date(ad.date || ad.createdAt).toISOString().slice(0, 10));
     setEditShopName(ad.shopName || "HKC Collection");
+    setEditPlatform(ad.platform || "Meesho");
     setEditAmount(ad.amount.toString());
     setEditNote(ad.note || "");
   };
@@ -160,8 +168,12 @@ function MeeshoAds() {
       return;
     }
 
-    const matchedShop = shops.find(s => s.shopName === editShopName);
-    const platform = matchedShop?.platform || "Meesho";
+    const matchedShop = shops.find(s => 
+      s.shopName.toLowerCase() === editShopName.trim().toLowerCase() &&
+      (s.platform || "Meesho").toLowerCase() === (editPlatform || "Meesho").toLowerCase()
+    );
+    const finalShopName = matchedShop ? matchedShop.shopName : editShopName.trim();
+    const finalPlatform = matchedShop ? (matchedShop.platform || "Meesho") : (editPlatform || "Meesho");
 
     setUpdating(true);
     try {
@@ -174,8 +186,8 @@ function MeeshoAds() {
         body: JSON.stringify({
           title: "Platform Ads",
           category: "Advertising",
-          shopName: editShopName,
-          platform: platform,
+          shopName: finalShopName,
+          platform: finalPlatform,
           amount: Number(editAmount),
           date: new Date(editDate).toISOString(),
           note: editNote.trim()
@@ -237,17 +249,28 @@ function MeeshoAds() {
     const monthlyBreakdownMap = {};
 
     ads.forEach((ad) => {
+      const adShopName = (ad.shopName || "HKC Collection").trim().toLowerCase();
+      const adPlatform = (ad.platform || "Meesho").trim().toLowerCase();
+
       // If shop filter is selected, filter ads stats accordingly
       if (filterShop && filterShop !== "All") {
-        const adShop = (ad.shopName || "HKC Collection").trim().toLowerCase();
-        if (adShop !== filterShop.trim().toLowerCase()) return;
+        let targetName = filterShop;
+        let targetPlatform = null;
+        if (filterShop.includes("|||")) {
+          const parts = filterShop.split("|||");
+          targetName = parts[0];
+          targetPlatform = parts[1];
+        }
+        if (adShopName !== targetName.trim().toLowerCase()) return;
+        if (targetPlatform && targetPlatform !== "All") {
+          if (adPlatform !== targetPlatform.trim().toLowerCase()) return;
+        }
       }
 
       const d = new Date(ad.date || ad.createdAt);
       const amountVal = ad.amount || 0;
-      const adShopName = (ad.shopName || "HKC Collection").trim().toLowerCase();
 
-      // Try to parse order count from note first, otherwise fall back to database orders on that day for that shop
+      // Try to parse order count from note first, otherwise fall back to database orders on that day for that shop and platform
       const noteMatch = ad.note && ad.note.match(/(\d+)\s*order/i);
       let entryOrders = 0;
       if (noteMatch) {
@@ -258,7 +281,8 @@ function MeeshoAds() {
           if (o.paymentStatus === "Cancel") return false;
           const oDate = new Date(o.date || o.createdAt).toISOString().slice(0, 10);
           const oShop = (o.shopName || "HKC Collection").trim().toLowerCase();
-          return oDate === dateStr && oShop === adShopName;
+          const oPlatform = (o.shopPlatform || "Meesho").trim().toLowerCase();
+          return oDate === dateStr && oShop === adShopName && oPlatform === adPlatform;
         }).length;
       }
 
@@ -335,9 +359,11 @@ function MeeshoAds() {
   const shopBreakdownList = useMemo(() => {
     const map = {};
     shops.forEach(s => {
-      map[s.shopName] = {
+      const p = s.platform || "Meesho";
+      const key = `${s.shopName.trim().toLowerCase()}___${p.trim().toLowerCase()}`;
+      map[key] = {
         shopName: s.shopName,
-        platform: s.platform,
+        platform: p,
         totalAllTime: 0,
         totalThisMonth: 0,
         entriesCount: 0
@@ -349,10 +375,11 @@ function MeeshoAds() {
     const curMonth = now.getMonth();
 
     ads.forEach(ad => {
-      const sName = ad.shopName || "HKC Collection";
-      const sPlatform = ad.platform || (shops.find(s => s.shopName === sName)?.platform) || "Meesho";
-      if (!map[sName]) {
-        map[sName] = {
+      const sName = (ad.shopName || "HKC Collection").trim();
+      const sPlatform = (ad.platform || "Meesho").trim();
+      const key = `${sName.toLowerCase()}___${sPlatform.toLowerCase()}`;
+      if (!map[key]) {
+        map[key] = {
           shopName: sName,
           platform: sPlatform,
           totalAllTime: 0,
@@ -360,11 +387,11 @@ function MeeshoAds() {
           entriesCount: 0
         };
       }
-      map[sName].totalAllTime += (ad.amount || 0);
-      map[sName].entriesCount += 1;
+      map[key].totalAllTime += (ad.amount || 0);
+      map[key].entriesCount += 1;
       const d = new Date(ad.date || ad.createdAt);
       if (d.getFullYear() === curYear && d.getMonth() === curMonth) {
-        map[sName].totalThisMonth += (ad.amount || 0);
+        map[key].totalThisMonth += (ad.amount || 0);
       }
     });
 
@@ -387,10 +414,22 @@ function MeeshoAds() {
   const filteredAds = useMemo(() => {
     return ads
       .filter((ad) => {
+        const adShop = (ad.shopName || "HKC Collection").trim().toLowerCase();
+        const adPlat = (ad.platform || "Meesho").trim().toLowerCase();
+
         // Shop filter
         if (filterShop && filterShop !== "All") {
-          const adShop = (ad.shopName || "HKC Collection").trim().toLowerCase();
-          if (adShop !== filterShop.trim().toLowerCase()) return false;
+          let targetName = filterShop;
+          let targetPlatform = null;
+          if (filterShop.includes("|||")) {
+            const parts = filterShop.split("|||");
+            targetName = parts[0];
+            targetPlatform = parts[1];
+          }
+          if (adShop !== targetName.trim().toLowerCase()) return false;
+          if (targetPlatform && targetPlatform !== "All") {
+            if (adPlat !== targetPlatform.trim().toLowerCase()) return false;
+          }
         }
 
         // Date match
@@ -402,13 +441,14 @@ function MeeshoAds() {
           }
         }
 
-        // Search text match (checks notes, title, and shopName)
+        // Search text match (checks notes, title, platform, and shopName)
         if (searchText.trim()) {
           const query = searchText.toLowerCase();
           const noteText = (ad.note || "").toLowerCase();
           const titleText = (ad.title || "").toLowerCase();
           const shopText = (ad.shopName || "").toLowerCase();
-          return noteText.includes(query) || titleText.includes(query) || shopText.includes(query);
+          const platText = (ad.platform || "").toLowerCase();
+          return noteText.includes(query) || titleText.includes(query) || shopText.includes(query) || platText.includes(query);
         }
 
         return true;
@@ -442,7 +482,11 @@ function MeeshoAds() {
             fontWeight: "600",
             color: "var(--primary)"
           }}>
-            <FaStore /> Filtered by: <strong>{filterShop}</strong>
+            <FaStore /> Filtered by: <strong>
+              {filterShop.includes("|||")
+                ? `${filterShop.split("|||")[0]} (${filterShop.split("|||")[1]})`
+                : filterShop}
+            </strong>
             <button 
               onClick={() => setFilterShop("All")}
               style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", display: "flex", alignItems: "center", marginLeft: "4px" }}
@@ -545,18 +589,34 @@ function MeeshoAds() {
                   Select Shop / Account
                 </label>
                 <select
-                  value={selectedShop}
-                  onChange={(e) => setSelectedShop(e.target.value)}
+                  value={`${selectedShop}|||${selectedPlatform}`}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.includes("|||")) {
+                      const [sName, sPlat] = val.split("|||");
+                      setSelectedShop(sName);
+                      setSelectedPlatform(sPlat);
+                    } else {
+                      setSelectedShop(val);
+                      const matched = shops.find(s => s.shopName.toLowerCase() === val.toLowerCase());
+                      if (matched) setSelectedPlatform(matched.platform || "Meesho");
+                    }
+                  }}
                   required
                   style={{ width: "100%", height: "38px", fontSize: "13px" }}
                 >
                   {shops.map(s => (
-                    <option key={s._id} value={s.shopName}>
+                    <option key={s._id} value={`${s.shopName}|||${s.platform || "Meesho"}`}>
                       {s.shopName} ({s.platform || "Meesho"})
                     </option>
                   ))}
                   {shops.length === 0 && (
-                    <option value="HKC Collection">HKC Collection (Meesho)</option>
+                    <option value="HKC Collection|||Meesho">HKC Collection (Meesho)</option>
+                  )}
+                  {selectedShop && !shops.some(s => s.shopName.toLowerCase() === selectedShop.toLowerCase() && (s.platform || "Meesho").toLowerCase() === (selectedPlatform || "Meesho").toLowerCase()) && (
+                    <option value={`${selectedShop}|||${selectedPlatform || "Meesho"}`}>
+                      {selectedShop} ({selectedPlatform || "Meesho"})
+                    </option>
                   )}
                 </select>
               </div>
@@ -659,12 +719,13 @@ function MeeshoAds() {
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 {shopBreakdownList.map((s, index) => {
                   const pStyle = getPlatformStyle(s.platform);
-                  const isCurrentFilter = filterShop === s.shopName;
+                  const filterKey = `${s.shopName}|||${s.platform}`;
+                  const isCurrentFilter = filterShop === filterKey;
                   
                   return (
                     <div 
                       key={index}
-                      onClick={() => setFilterShop(prev => prev === s.shopName ? "All" : s.shopName)}
+                      onClick={() => setFilterShop(prev => prev === filterKey ? "All" : filterKey)}
                       style={{ 
                         display: "flex", 
                         justifyContent: "space-between", 
@@ -682,7 +743,7 @@ function MeeshoAds() {
                       onMouseLeave={(e) => {
                         if (!isCurrentFilter) e.currentTarget.style.background = "var(--bg-primary)";
                       }}
-                      title="Click to filter by this shop"
+                      title={`Click to filter by ${s.shopName} (${s.platform})`}
                     >
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -833,20 +894,24 @@ function MeeshoAds() {
                 <select
                   value={filterShop}
                   onChange={(e) => setFilterShop(e.target.value)}
-                  style={{ height: "38px", fontSize: "13px", minWidth: "140px", padding: "6px 12px" }}
-                  title="Filter by Shop"
+                  style={{ height: "38px", fontSize: "13px", minWidth: "160px", padding: "6px 12px" }}
+                  title="Filter by Shop & Platform"
                 >
-                  <option value="All">All Shops</option>
+                  <option value="All">All Shops & Platforms</option>
                   {shops.map(s => (
-                    <option key={s._id} value={s.shopName}>
+                    <option key={s._id} value={`${s.shopName}|||${s.platform || "Meesho"}`}>
                       {s.shopName} ({s.platform || "Meesho"})
                     </option>
                   ))}
-                  {Array.from(new Set(ads.map(a => a.shopName || "HKC Collection")))
-                    .filter(name => !shops.some(s => s.shopName === name))
-                    .map(name => (
-                      <option key={name} value={name}>{name}</option>
-                    ))
+                  {Array.from(new Set(ads.map(a => `${a.shopName || "HKC Collection"}|||${a.platform || "Meesho"}`)))
+                    .filter(val => {
+                      const [n, p] = val.split("|||");
+                      return !shops.some(s => s.shopName.toLowerCase() === n.toLowerCase() && (s.platform || "Meesho").toLowerCase() === p.toLowerCase());
+                    })
+                    .map(val => {
+                      const [n, p] = val.split("|||");
+                      return <option key={val} value={val}>{n} ({p})</option>;
+                    })
                   }
                 </select>
               </div>
@@ -923,13 +988,15 @@ function MeeshoAds() {
                       const adDate = new Date(ad.date || ad.createdAt);
                       const dateStr = adDate.toISOString().slice(0, 10);
                       const adShopName = (ad.shopName || "HKC Collection").trim().toLowerCase();
+                      const adPlatform = (ad.platform || "Meesho").trim().toLowerCase();
                       
-                      // Count orders on this exact day for this shop from DB
+                      // Count orders on this exact day for this shop and platform from DB
                       const dbOrdersCount = orders.filter(o => {
                         if (o.paymentStatus === "Cancel") return false;
                         const oDate = new Date(o.date || o.createdAt).toISOString().slice(0, 10);
                         const oShop = (o.shopName || "HKC Collection").trim().toLowerCase();
-                        return oDate === dateStr && oShop === adShopName;
+                        const oPlatform = (o.shopPlatform || "Meesho").trim().toLowerCase();
+                        return oDate === dateStr && oShop === adShopName && oPlatform === adPlatform;
                       }).length;
 
                       // Try to parse order count from note (e.g. "16 Order", "16 orders"), otherwise fall back to DB
@@ -938,8 +1005,11 @@ function MeeshoAds() {
                       
                       const adTotalWithGst = (ad.amount || 0) * 1.18;
                       const avgPerOrderWithGst = ordersCount > 0 ? adTotalWithGst / ordersCount : 0;
-                      const sObj = shops.find(s => s.shopName === ad.shopName);
-                      const pStyle = getPlatformStyle(ad.platform || sObj?.platform);
+                      const sObj = shops.find(s => 
+                        s.shopName.toLowerCase() === (ad.shopName || "").toLowerCase() &&
+                        (s.platform || "Meesho").toLowerCase() === adPlatform
+                      );
+                      const pStyle = getPlatformStyle(ad.platform || sObj?.platform || "Meesho");
 
                       return (
                         <tr key={ad._id} style={{ borderBottom: "1px solid var(--border-color)" }}>
@@ -1027,18 +1097,34 @@ function MeeshoAds() {
                     Shop / Account
                   </label>
                   <select
-                    value={editShopName}
-                    onChange={(e) => setEditShopName(e.target.value)}
+                    value={`${editShopName}|||${editPlatform}`}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val.includes("|||")) {
+                        const [sName, sPlat] = val.split("|||");
+                        setEditShopName(sName);
+                        setEditPlatform(sPlat);
+                      } else {
+                        setEditShopName(val);
+                        const matched = shops.find(s => s.shopName.toLowerCase() === val.toLowerCase());
+                        if (matched) setEditPlatform(matched.platform || "Meesho");
+                      }
+                    }}
                     required
                     style={{ width: "100%", height: "38px", fontSize: "13px" }}
                   >
                     {shops.map(s => (
-                      <option key={s._id} value={s.shopName}>
+                      <option key={s._id} value={`${s.shopName}|||${s.platform || "Meesho"}`}>
                         {s.shopName} ({s.platform || "Meesho"})
                       </option>
                     ))}
                     {shops.length === 0 && (
-                      <option value="HKC Collection">HKC Collection (Meesho)</option>
+                      <option value="HKC Collection|||Meesho">HKC Collection (Meesho)</option>
+                    )}
+                    {editShopName && !shops.some(s => s.shopName.toLowerCase() === editShopName.toLowerCase() && (s.platform || "Meesho").toLowerCase() === (editPlatform || "Meesho").toLowerCase()) && (
+                      <option value={`${editShopName}|||${editPlatform || "Meesho"}`}>
+                        {editShopName} ({editPlatform || "Meesho"})
+                      </option>
                     )}
                   </select>
                 </div>

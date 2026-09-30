@@ -61,6 +61,10 @@ export const getOrders = async (req, res) => {
     if (req.query.shopName && req.query.shopName !== "All") {
       query.shopName = req.query.shopName;
     }
+    const plat = req.query.shopPlatform || req.query.platform;
+    if (plat && plat !== "All") {
+      query.shopPlatform = plat;
+    }
 
     const orders = await Order.find(query).populate("productId");
 

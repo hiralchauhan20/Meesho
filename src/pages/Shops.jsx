@@ -144,7 +144,7 @@ function Shops() {
         statsMap[key].totalSales += sell;
       } else if (status === "Pending") {
         statsMap[key].pendingOrders += 1;
-      } else if (status === "Return" || status === "Wrong Return" || status === "RTO Returned" || status === "Cancel") {
+      } else if (status === "Return" || status === "Wrong Return" || status === "RTO Returned" || status === "Cancel" || status === "Exchange (1 Time)" || status === "Exchange (2 Times)") {
         statsMap[key].returnOrders += 1;
       }
     });
@@ -850,6 +850,9 @@ function Shops() {
                     boxSizing: "border-box"
                   }}
                 />
+                <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px", marginBottom: "0" }}>
+                  💡 Tip: You can keep the same shop name across different platforms (e.g. "HKC Collection" on Meesho & "HKC Collection" on Flipkart).
+                </p>
               </div>
 
               <div>

@@ -135,6 +135,24 @@ function Claims() {
     setEditLossAmount(o.lossAmount !== undefined && o.lossAmount !== null && o.lossAmount > 0 ? String(o.lossAmount) : "");
   };
 
+  const isOrderMatchingShop = (o, selShop) => {
+    if (!selShop) return true;
+    let targetName = selShop;
+    let targetPlatform = null;
+    if (selShop.includes("|||")) {
+      const parts = selShop.split("|||");
+      targetName = parts[0];
+      targetPlatform = parts[1];
+    }
+    const oName = (o.shopName || "HKC Collection").trim().toLowerCase();
+    if (oName !== targetName.trim().toLowerCase()) return false;
+    if (targetPlatform && targetPlatform !== "All") {
+      const oPlat = (o.shopPlatform || "Meesho").trim().toLowerCase();
+      if (oPlat !== targetPlatform.trim().toLowerCase()) return false;
+    }
+    return true;
+  };
+
   // Global Claims Stats (calculated from all transactions matching shop filter)
   const claimStats = useMemo(() => {
     let totalClaims = 0;
@@ -146,7 +164,7 @@ function Claims() {
     orders.forEach((o) => {
       const isClaim = (o.claimStatus && o.claimStatus !== "No Claim") || o.paymentStatus === "Wrong Return";
       if (!isClaim) return;
-      if (selectedShop && (o.shopName || "HKC Collection") !== selectedShop) return;
+      if (!isOrderMatchingShop(o, selectedShop)) return;
 
       totalClaims++;
       const effectiveStatus = (o.claimStatus && o.claimStatus !== "No Claim") ? o.claimStatus : "Pending";
@@ -169,7 +187,7 @@ function Claims() {
     orders.forEach(o => {
       const isClaim = (o.claimStatus && o.claimStatus !== "No Claim") || o.paymentStatus === "Wrong Return";
       if (isClaim) {
-        if (!selectedShop || (o.shopName || "HKC Collection") === selectedShop) {
+        if (isOrderMatchingShop(o, selectedShop)) {
           prods.add(o.productName || o.productId?.productName);
         }
       }
@@ -185,7 +203,7 @@ function Claims() {
       if (!isClaim) return false;
 
       // Shop Match
-      if (selectedShop && (o.shopName || "HKC Collection") !== selectedShop) return false;
+      if (!isOrderMatchingShop(o, selectedShop)) return false;
 
       const effectiveStatus = (o.claimStatus && o.claimStatus !== "No Claim") ? o.claimStatus : "Pending";
 
@@ -240,7 +258,7 @@ function Claims() {
           >
             <option value="">🏢 All Shops / Accounts</option>
             {shops.map((s) => (
-              <option key={s._id} value={s.shopName}>
+              <option key={s._id} value={`${s.shopName}|||${s.platform}`}>
                 {s.shopName} ({s.platform})
               </option>
             ))}
@@ -439,7 +457,7 @@ function Claims() {
                       </td>
                       <td style={{ padding: "14px 16px", fontWeight: "600", color: "var(--text-primary)", fontSize: "13px" }}>
                         {prodName}
-                        {o.paymentStatus === "Wrong Return" && o.lossAmount > 0 && (
+                        {(o.paymentStatus === "Wrong Return" || o.paymentStatus === "Exchange (1 Time)" || o.paymentStatus === "Exchange (2 Times)") && o.lossAmount > 0 && (
                           <div style={{ fontSize: "11px", color: "var(--danger)", fontWeight: "500", marginTop: "2px" }}>
                             Product Loss: ₹{o.lossAmount}
                           </div>
@@ -451,8 +469,16 @@ function Claims() {
                           borderRadius: "6px",
                           fontSize: "11px",
                           fontWeight: "700",
-                          backgroundColor: o.paymentStatus === "Wrong Return" ? "rgba(239, 68, 68, 0.2)" : "rgba(139, 92, 246, 0.15)",
-                          color: o.paymentStatus === "Wrong Return" ? "var(--danger)" : "#a78bfa"
+                          backgroundColor: 
+                            o.paymentStatus === "Wrong Return" ? "rgba(239, 68, 68, 0.2)" :
+                            o.paymentStatus === "Exchange (1 Time)" ? "rgba(249, 115, 22, 0.15)" :
+                            o.paymentStatus === "Exchange (2 Times)" ? "rgba(225, 29, 72, 0.2)" :
+                            "rgba(139, 92, 246, 0.15)",
+                          color: 
+                            o.paymentStatus === "Wrong Return" ? "var(--danger)" :
+                            o.paymentStatus === "Exchange (1 Time)" ? "#fb923c" :
+                            o.paymentStatus === "Exchange (2 Times)" ? "#f43f5e" :
+                            "#a78bfa"
                         }}>
                           {o.paymentStatus || "Wrong Return"}
                         </span>
@@ -491,9 +517,16 @@ function Claims() {
                         {(() => {
                           const loss = Number(o.lossAmount) || 0;
                           const claimAmt = effectiveStatus === "Approved" ? (Number(o.claimAmount) || 0) : 0;
-                          const netPL = o.paymentStatus === "Wrong Return" 
-                            ? (effectiveStatus === "Approved" ? (claimAmt - 157 - loss) : -157)
-                            : (claimAmt - 157);
+                          let netPL = 0;
+                          if (o.paymentStatus === "Wrong Return") {
+                            netPL = effectiveStatus === "Approved" ? (claimAmt - 157 - loss) : (-157 - loss);
+                          } else if (o.paymentStatus === "Exchange (1 Time)") {
+                            netPL = effectiveStatus === "Approved" ? (claimAmt - 157 - loss) : (-157 - loss);
+                          } else if (o.paymentStatus === "Exchange (2 Times)") {
+                            netPL = effectiveStatus === "Approved" ? (claimAmt - 340 - loss) : (-340 - loss);
+                          } else {
+                            netPL = (claimAmt - 157);
+                          }
                           return (
                             <span style={{ color: netPL >= 0 ? "var(--success)" : "var(--danger)" }}>
                               ₹{netPL.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

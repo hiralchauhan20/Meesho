@@ -12,6 +12,7 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import investmentRoutes from "./routes/investmentRoutes.js";
 import shopRoutes from "./routes/shopRoutes.js";
+import courierRoutes from "./routes/courierRoutes.js";
 
 dotenv.config();
 connectDB();
@@ -34,6 +35,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/investments", investmentRoutes);
 app.use("/api/shops", shopRoutes);
+app.use("/api/couriers", courierRoutes);
 
 // mongoose
 //   .connect(process.env.MONGO_URL)

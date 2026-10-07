@@ -37,7 +37,7 @@ const calculateOrderProfit = (o) => {
   if (paymentStatus === "Cancel" || paymentStatus === "RTO Returned") {
     return -5;
   }
-  
+
   const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
   const qtyVal = o.quantity || 1;
   const totalPurchaseCost = purchaseVal * qtyVal;
@@ -77,7 +77,7 @@ const calculateOrderProfit = (o) => {
     }
     return -340 - loss;
   }
-  
+
   // Complete state: calculate profit normally
   const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
   const gstRate = o.gst || o.productId?.gst || 0;
@@ -96,6 +96,7 @@ function Ledger() {
   const [stocks, setStocks] = useState([]);
   const [products, setProducts] = useState([]);
   const [shops, setShops] = useState([]);
+  const [courierList, setCourierList] = useState(["Valmo", "Xpressbees", "Shadowfax", "Delhivery"]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -124,7 +125,7 @@ function Ledger() {
 
   useEffect(() => {
     if (filterShop) {
-      const matched = shops.find(s => 
+      const matched = shops.find(s =>
         (s.shopName || "").toLowerCase() === filterShop.trim().toLowerCase() &&
         (filterPlatform === "All" || (s.platform || "").toLowerCase() === filterPlatform.trim().toLowerCase())
       ) || shops.find(s => (s.shopName || "").toLowerCase() === filterShop.trim().toLowerCase());
@@ -141,7 +142,7 @@ function Ledger() {
     if (filterShop && filterShop !== "All") {
       setShopName(filterShop);
       setPdfSelectedShop(filterShop);
-      const matched = shops.find(s => 
+      const matched = shops.find(s =>
         (s.shopName || "").toLowerCase() === filterShop.trim().toLowerCase() &&
         (filterPlatform === "All" || (s.platform || "").toLowerCase() === filterPlatform.trim().toLowerCase())
       ) || shops.find(s => (s.shopName || "").toLowerCase() === filterShop.trim().toLowerCase());
@@ -244,7 +245,7 @@ function Ledger() {
     if (prefix2 === 16) return "Chandigarh";
     if (prefix2 === 17) return "Himachal Pradesh";
     if (prefix2 >= 18 && prefix2 <= 19) return "Jammu & Kashmir";
-    
+
     if (prefix3 >= 246 && prefix3 <= 249) return "Uttarakhand";
     if (prefix3 >= 262 && prefix3 <= 263) return "Uttarakhand";
     if (prefix2 >= 20 && prefix2 <= 28) return "Uttar Pradesh";
@@ -291,7 +292,7 @@ function Ledger() {
     if (!productsList || productsList.length === 0 || !text) return null;
 
     const pageLower = text.toLowerCase();
-    
+
     // Normalize strings (remove all non-alphanumeric)
     const cleanStr = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     const normPage = cleanStr(pageLower);
@@ -331,7 +332,7 @@ function Ledger() {
     for (const match of parenMatches) {
       const inside = match[1] || match[2] || "";
       const parts = inside.split(/[+\/,]|(?:\band\b)|(?:\s*-\s*)/).map(p => p.trim().toLowerCase()).filter(Boolean);
-      
+
       let foundInParen = 0;
       for (const part of parts) {
         for (const col of recognizedColors) {
@@ -569,11 +570,17 @@ function Ledger() {
 
   const extractCourierPartner = (text) => {
     const t = text.toLowerCase().replace(/\s+/g, "");
+    for (const c of courierList) {
+      const cClean = c.toLowerCase().replace(/\s+/g, "");
+      if (t.includes(cClean)) return c;
+    }
     if (t.includes("delhivery")) return "Delhivery";
     if (t.includes("shadowfax")) return "Shadowfax";
     if (t.includes("xpressbees") || t.includes("expressbees")) return "Xpressbees";
+    if (t.includes("ecomexpress") || t.includes("ecom")) return "Ecom Express";
+    if (t.includes("ekart")) return "Ekart";
     if (t.includes("valmo")) return "Valmo";
-    return "Valmo";
+    return courierList[0] || "Valmo";
   };
 
   const extractCustomerState = (text, statesList = INDIA_STATES) => {
@@ -682,7 +689,7 @@ function Ledger() {
 
   const extractShopName = (text, shopsList = []) => {
     const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-    
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const inlineMatch = line.match(/if\s*undelivered,?\s*return\s*to:?\s*(.+)/i);
@@ -725,7 +732,7 @@ function Ledger() {
     // 1. Look for explicit "Order No." or "Purchase Order No." line
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      
+
       // Check line itself having "Order No. 32998..." or "Purchase Order No. 32998..."
       const matchInline = line.match(/(?:purchase\s*order\s*no\.?|order\s*no\.?|order\s*id)\s*[:\s\-]*([0-9]{15,19}(?:_\d+)?)/i);
       if (matchInline && matchInline[1]) {
@@ -925,7 +932,7 @@ function Ledger() {
           const dateMatch = extractOrderDate(pageText);
 
           const matchedP = autoMatchProduct(pageText, products);
-          
+
           const isDuplicateInCurrentUpload = orderNoMatch && parsedRows.some(row => row.orderNo && row.orderNo.trim() === orderNoMatch.trim());
           const isAwbDuplicateInCurrentUpload = awbIdMatch && parsedRows.some(row => row.awbId && row.awbId.trim() === awbIdMatch.trim());
 
@@ -949,12 +956,12 @@ function Ledger() {
             sellingPrice: matchedP ? String(matchedP.sellingPrice) : "",
             pageText: pageText,
             isDuplicate: isDuplicateOrder || isDuplicateAwb,
-            duplicateReason: isDuplicateOrder && isDuplicateAwb 
-              ? "Duplicate Order ID & Tracking ID" 
-              : isDuplicateOrder 
-                ? "Duplicate Order ID" 
-                : isDuplicateAwb 
-                  ? "Duplicate Tracking ID (AWB)" 
+            duplicateReason: isDuplicateOrder && isDuplicateAwb
+              ? "Duplicate Order ID & Tracking ID"
+              : isDuplicateOrder
+                ? "Duplicate Order ID"
+                : isDuplicateAwb
+                  ? "Duplicate Tracking ID (AWB)"
                   : ""
           });
         }
@@ -1010,12 +1017,12 @@ function Ledger() {
           const isDuplicateOrder = checkOrderNo && orders.some(o => o.orderNo && o.orderNo.trim() === checkOrderNo.trim());
           const isDuplicateAwb = checkAwbId && orders.some(o => o.awbId && o.awbId.trim() === checkAwbId.trim());
           updated.isDuplicate = isDuplicateOrder || isDuplicateAwb;
-          updated.duplicateReason = isDuplicateOrder && isDuplicateAwb 
-            ? "Duplicate Order ID & Tracking ID" 
-            : isDuplicateOrder 
-              ? "Duplicate Order ID" 
-              : isDuplicateAwb 
-                ? "Duplicate Tracking ID (AWB)" 
+          updated.duplicateReason = isDuplicateOrder && isDuplicateAwb
+            ? "Duplicate Order ID & Tracking ID"
+            : isDuplicateOrder
+              ? "Duplicate Order ID"
+              : isDuplicateAwb
+                ? "Duplicate Tracking ID (AWB)"
                 : "";
         }
         return updated;
@@ -1038,7 +1045,7 @@ function Ledger() {
     setPdfParsing(true);
     setPdfProgress(`Saving ${validOrders.length} orders...`);
 
-    const targetShop = shops.find(s => 
+    const targetShop = shops.find(s =>
       s.shopName.toLowerCase() === (pdfSelectedShop || "").toLowerCase() &&
       (s.platform || "Meesho").toLowerCase() === (pdfSelectedPlatform || "Meesho").toLowerCase()
     ) || shops.find(s => s.shopName.toLowerCase() === (pdfSelectedShop || "").toLowerCase());
@@ -1128,8 +1135,8 @@ function Ledger() {
     setSubmitting(true);
 
     try {
-      const selectedShopObj = shops.find(s => 
-        s.shopName.toLowerCase() === editShopName.trim().toLowerCase() && 
+      const selectedShopObj = shops.find(s =>
+        s.shopName.toLowerCase() === editShopName.trim().toLowerCase() &&
         (s.platform || "Meesho").toLowerCase() === (editShopPlatform || "Meesho").toLowerCase()
       ) || shops.find(s => s.shopName.toLowerCase() === editShopName.trim().toLowerCase());
       const chosenPlatform = editShopPlatform || (selectedShopObj ? selectedShopObj.platform : "Meesho");
@@ -1221,7 +1228,31 @@ function Ledger() {
     fetchStockSummary();
     fetchProducts();
     fetchShops();
+    fetchCouriers();
   }, []);
+
+  const fetchCouriers = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/couriers`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const names = data.map(c => c.name);
+          setCourierList(names);
+          const def = data.find(c => c.isDefault);
+          if (def) {
+            setCourierPartner(def.name);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch couriers:", err);
+    }
+  };
 
   const fetchShops = async () => {
     try {
@@ -1366,8 +1397,8 @@ function Ledger() {
     setSubmitting(true);
 
     try {
-      const selectedShopObj = shops.find(s => 
-        s.shopName.toLowerCase() === shopName.trim().toLowerCase() && 
+      const selectedShopObj = shops.find(s =>
+        s.shopName.toLowerCase() === shopName.trim().toLowerCase() &&
         (s.platform || "Meesho").toLowerCase() === (shopPlatform || "Meesho").toLowerCase()
       ) || shops.find(s => s.shopName.toLowerCase() === shopName.trim().toLowerCase());
       const currentPlatform = shopPlatform || (selectedShopObj ? selectedShopObj.platform : "Meesho");
@@ -1472,7 +1503,7 @@ function Ledger() {
     }
 
     try {
-      const updatePayload = { 
+      const updatePayload = {
         paymentStatus: newStatus,
         lossAmount: 0
       };
@@ -1604,7 +1635,7 @@ function Ledger() {
       const orderNumber = o.orderNo || "";
       const awbNumber = o.awbId || "";
       const state = o.customerState || "Gujarat";
-      
+
       const profit = calculateOrderProfit(o);
       const formattedDate = new Date(o.date || o.createdAt).toLocaleDateString("en-IN");
       const prodName = o.productName || o.productId?.productName || "Unknown Product";
@@ -1632,14 +1663,14 @@ function Ledger() {
       const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
       const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
       const qtyVal = o.quantity || 1;
-      
+
       const profit = calculateOrderProfit(o);
       const payStatus = o.paymentStatus || "Pending";
       const claimAmt = o.claimAmount || 0;
-      
+
       totalQty += qtyVal;
       totalProfit += profit;
-      
+
       // Income (totalSales) & totalPurchase ONLY count after order is Complete!
       if (payStatus === "Complete") {
         totalPurchase += purchaseVal * qtyVal;
@@ -1853,9 +1884,9 @@ function Ledger() {
             Record product purchases, selling prices, and track instant profits like Excel
           </p>
         </div>
-        <button 
-          className="btn btn-secondary" 
-          onClick={exportCSV} 
+        <button
+          className="btn btn-secondary"
+          onClick={exportCSV}
           style={{ gap: "8px", height: "42px", padding: "0 16px", borderRadius: "8px" }}
         >
           <FaFileExport /> Export to Excel (CSV)
@@ -2007,10 +2038,9 @@ function Ledger() {
               style={{ height: "38px", fontSize: "13px", padding: "6px 12px" }}
             >
               <option value="">All Couriers</option>
-              <option value="Valmo">Valmo</option>
-              <option value="Xpressbees">Xpressbees</option>
-              <option value="Shadowfax">Shadowfax</option>
-              <option value="Delhivery">Delhivery</option>
+              {courierList.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
 
@@ -2067,7 +2097,7 @@ function Ledger() {
               <span>Showing all transactions. Use filters above to narrow down.</span>
             )}
           </div>
-          
+
           <div style={{
             background: "rgba(255, 255, 255, 0.03)",
             border: "1px solid var(--border-color)",
@@ -2106,7 +2136,7 @@ function Ledger() {
       </div>
 
       {/* Bulk Import Meesho Labels PDF */}
-      <div 
+      <div
         style={{
           background: "var(--glass-bg)",
           border: "2px dashed var(--primary)",
@@ -2120,9 +2150,9 @@ function Ledger() {
           transition: "all 0.3s ease"
         }}
       >
-        <input 
-          type="file" 
-          accept=".pdf" 
+        <input
+          type="file"
+          accept=".pdf"
           multiple
           onChange={handlePdfUpload}
           style={{
@@ -2151,13 +2181,13 @@ function Ledger() {
       </div>
 
       {/* Spreadsheet Quick Entry Form */}
-      <form 
-        onSubmit={handleAddRow} 
-        style={{ 
-          background: "var(--glass-bg)", 
-          border: "1px solid var(--border-color)", 
-          borderRadius: "12px", 
-          padding: "24px", 
+      <form
+        onSubmit={handleAddRow}
+        style={{
+          background: "var(--glass-bg)",
+          border: "1px solid var(--border-color)",
+          borderRadius: "12px",
+          padding: "24px",
           marginBottom: "30px",
           boxShadow: "var(--glass-shadow)"
         }}
@@ -2165,10 +2195,10 @@ function Ledger() {
         <h3 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px", color: "var(--primary)" }}>
           <FaTable /> Log New Sale Transaction
         </h3>
-        
+
         {/* Balanced Grid for Desktop and Tablet */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px" }}>
-          
+
           {/* Row 1: General Details */}
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Date</label>
@@ -2194,15 +2224,15 @@ function Ledger() {
                 <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--danger)" }}>❌ Already Exists</span>
               )}
             </div>
-            <input 
-              type="text" 
-              placeholder="e.g. 30880548..." 
-              value={orderNo} 
-              onChange={(e) => setOrderNo(e.target.value)} 
-              style={{ 
-                width: "100%", 
-                borderColor: orderNo.trim() && orders.some(o => o.orderNo && o.orderNo.trim().toLowerCase() === orderNo.trim().toLowerCase()) ? "var(--danger)" : undefined 
-              }} 
+            <input
+              type="text"
+              placeholder="e.g. 30880548..."
+              value={orderNo}
+              onChange={(e) => setOrderNo(e.target.value)}
+              style={{
+                width: "100%",
+                borderColor: orderNo.trim() && orders.some(o => o.orderNo && o.orderNo.trim().toLowerCase() === orderNo.trim().toLowerCase()) ? "var(--danger)" : undefined
+              }}
             />
           </div>
           <div>
@@ -2216,10 +2246,9 @@ function Ledger() {
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>Courier Partner</label>
             <select value={courierPartner} onChange={(e) => setCourierPartner(e.target.value)} style={{ width: "100%" }}>
-              <option value="Valmo">Valmo</option>
-              <option value="Xpressbees">Xpressbees</option>
-              <option value="Shadowfax">Shadowfax</option>
-              <option value="Delhivery">Delhivery</option>
+              {courierList.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
 
@@ -2328,27 +2357,27 @@ function Ledger() {
                 <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--danger)" }}>❌ Already Exists</span>
               )}
             </div>
-            <input 
-              type="text" 
-              placeholder="e.g. 1435252..." 
-              value={awbId} 
-              onChange={(e) => setAwbId(e.target.value)} 
-              style={{ 
-                width: "100%", 
-                borderColor: awbId.trim() && orders.some(o => o.awbId && o.awbId.trim().toLowerCase() === awbId.trim().toLowerCase()) ? "var(--danger)" : undefined 
-              }} 
+            <input
+              type="text"
+              placeholder="e.g. 1435252..."
+              value={awbId}
+              onChange={(e) => setAwbId(e.target.value)}
+              style={{
+                width: "100%",
+                borderColor: awbId.trim() && orders.some(o => o.awbId && o.awbId.trim().toLowerCase() === awbId.trim().toLowerCase()) ? "var(--danger)" : undefined
+              }}
             />
           </div>
           <div style={{ display: "flex", alignItems: "flex-end" }}>
-            <button 
-              type="submit" 
-              className="btn btn-primary" 
+            <button
+              type="submit"
+              className="btn btn-primary"
               disabled={submitting}
-              style={{ 
-                width: "100%", 
-                height: "44px", 
-                borderRadius: "8px", 
-                fontSize: "14px", 
+              style={{
+                width: "100%",
+                height: "44px",
+                borderRadius: "8px",
+                fontSize: "14px",
                 fontWeight: "600",
                 display: "flex",
                 alignItems: "center",
@@ -2373,430 +2402,430 @@ function Ledger() {
         <>
           {/* Bulk Action Toolbar */}
           {selectedOrderIds.length > 0 && (
-        <div 
-          className="animate-fade"
-          style={{
-            background: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid rgba(239, 68, 68, 0.3)",
-            borderRadius: "8px",
-            padding: "12px 20px",
-            marginBottom: "16px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            boxShadow: "var(--glass-shadow)"
-          }}
-        >
-          <div style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: "600" }}>
-            Selected <strong style={{ color: "#ef4444" }}>{selectedOrderIds.length}</strong> orders from list
-          </div>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button 
-              type="button"
-              onClick={() => setSelectedOrderIds([])}
+            <div
+              className="animate-fade"
               style={{
-                background: "transparent",
-                border: "1px solid var(--border-color)",
-                color: "var(--text-secondary)",
-                padding: "8px 16px",
-                borderRadius: "6px",
-                fontSize: "13px",
-                fontWeight: "600",
-                cursor: "pointer"
-              }}
-            >
-              Clear Selection
-            </button>
-            <button 
-              type="button"
-              onClick={handleBulkDeleteClick}
-              style={{
-                background: "#ef4444",
-                border: "none",
-                color: "#ffffff",
-                padding: "8px 16px",
-                borderRadius: "6px",
-                fontSize: "13px",
-                fontWeight: "600",
-                cursor: "pointer",
+                background: "rgba(239, 68, 68, 0.1)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                borderRadius: "8px",
+                padding: "12px 20px",
+                marginBottom: "16px",
                 display: "flex",
+                justifyContent: "space-between",
                 alignItems: "center",
-                gap: "6px"
+                boxShadow: "var(--glass-shadow)"
               }}
             >
-              <FaTrash /> Delete Selected
-            </button>
-          </div>
-        </div>
-      )}
-
-        <div 
-          className="table-container animate-fade" 
-          style={{ 
-            boxShadow: "var(--glass-shadow)", 
-            borderRadius: "12px", 
-            border: "1px solid var(--border-color)",
-            background: "var(--glass-bg)",
-            overflowX: "auto"
-          }}
-        >
-          <table className="premium-table" style={{ width: "100%", borderCollapse: "collapse", minWidth: "1000px" }}>
-            <thead>
-              <tr style={{ background: "rgba(0, 0, 0, 0.25)", borderBottom: "2px solid var(--border-color)" }}>
-                <th style={{ padding: "14px 16px", textAlign: "center", width: "40px" }}>
-                  <input type="checkbox" checked={isAllSelected} onChange={handleToggleSelectAll} style={{ cursor: "pointer" }} />
-                </th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Date</th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Shop / Store</th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Order No.</th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>AWB ID</th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Product Name</th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>State</th>
-                <th style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px" }}>Buying (₹)</th>
-                <th style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px" }}>Selling (₹)</th>
-                <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>Qty</th>
-                <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>GST</th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Courier</th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Payment</th>
-                <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Platform Claim</th>
-                <th style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px" }}>Net Profit (₹)</th>
-                <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredOrders.length === 0 ? (
-                <tr>
-                  <td colSpan="16" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
-                    {orders.length === 0 ? "No transactions logged in your accounts. Insert a row above to get started." : "No orders match your search/filter. Try different criteria or clear filters."}
-                  </td>
-                </tr>
-              ) : (
-                filteredOrders.map((o, idx) => {
-                  const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
-                  const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
-                  const gstRate = o.gst || o.productId?.gst || 0;
-                  const qtyVal = o.quantity || 1;
-                  const courier = o.courierPartner || "Valmo";
-                  const orderNumber = o.orderNo || "-";
-                  const stateName = o.customerState || "Gujarat";
-                  const profit = calculateOrderProfit(o);
-                  const pStyle = getPlatformStyle(o.shopPlatform || "Meesho");
-                  
-                  const formattedDate = new Date(o.date || o.createdAt).toLocaleDateString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric"
-                  });
-
-                  return (
-                    <tr 
-                      key={o._id} 
-                      style={{ 
-                        borderBottom: "1px solid var(--border-color)",
-                        background: idx % 2 === 0 ? "rgba(255,255,255,0.01)" : "rgba(255,255,255,0.03)",
-                        transition: "background var(--transition-fast)"
-                      }}
-                      className="ledger-row-hover"
-                    >
-                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
-                        <input 
-                          type="checkbox" 
-                          checked={selectedOrderIds.includes(o._id)} 
-                          onChange={() => handleToggleSelect(o._id)} 
-                          style={{ cursor: "pointer" }}
-                        />
-                      </td>
-                      <td style={{ padding: "14px 16px", fontSize: "13px", color: "var(--text-secondary)" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <FaCalendarAlt style={{ color: "var(--text-muted)" }} />
-                          {formattedDate}
-                        </div>
-                      </td>
-                      <td style={{ padding: "14px 16px", fontSize: "13px" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                          <span style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "13px" }}>
-                            {o.shopName || "HKC Collection"}
-                          </span>
-                          <span style={{
-                            fontSize: "10px",
-                            fontWeight: "700",
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            background: pStyle.bg,
-                            color: pStyle.color,
-                            border: `1px solid ${pStyle.border}`,
-                            width: "fit-content",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "3px"
-                          }}>
-                            <FaTag style={{ fontSize: "8px" }} /> {o.shopPlatform || "Meesho"}
-                          </span>
-                        </div>
-                      </td>
-                      <td style={{ padding: "14px 16px", fontFamily: "monospace", fontSize: "12px", color: "var(--text-muted)" }}>
-                        {orderNumber}
-                      </td>
-                      <td style={{ padding: "14px 16px", fontFamily: "monospace", fontSize: "12px", color: "var(--text-muted)" }}>
-                        {o.awbId || "-"}
-                      </td>
-                      <td style={{ padding: "14px 16px", fontWeight: "600", color: "var(--text-primary)", fontSize: "13px" }}>
-                        {o.productName || o.productId?.productName || "Unknown Product"}
-                      </td>
-                      <td style={{ padding: "14px 16px", fontSize: "13px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <FaMapMarkerAlt style={{ color: "var(--text-muted)", fontSize: "11px" }} />
-                          {stateName}
-                        </div>
-                      </td>
-                      <td style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px", fontWeight: "500" }}>
-                        ₹{purchaseVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px", fontWeight: "500" }}>
-                        ₹{sellingVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>{qtyVal}</td>
-                      <td style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px", color: "var(--text-secondary)" }}>
-                        {gstRate}%
-                      </td>
-                      <td style={{ padding: "14px 16px", fontSize: "13px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--text-secondary)" }}>
-                          <FaTruck style={{ fontSize: "11px", color: "var(--text-muted)" }} />
-                          {courier}
-                        </div>
-                      </td>
-                      <td style={{ padding: "10px 16px", fontSize: "13px" }}>
-                        <select 
-                          value={o.paymentStatus || "Pending"} 
-                          onChange={(e) => handleStatusChange(o._id, e.target.value)}
-                          style={{
-                            padding: "6px 10px",
-                            borderRadius: "8px",
-                            fontSize: "12px",
-                            fontWeight: "600",
-                            border: "1px solid var(--border-color)",
-                            cursor: "pointer",
-                            width: "145px",
-                            backgroundColor: 
-                              o.paymentStatus === "Complete" ? "rgba(16, 185, 129, 0.15)" :
-                              o.paymentStatus === "Pending" ? "rgba(245, 158, 11, 0.15)" :
-                              o.paymentStatus === "RTO Returned" ? "rgba(14, 165, 233, 0.15)" :
-                              o.paymentStatus === "Return" ? "rgba(139, 92, 246, 0.15)" :
-                              o.paymentStatus === "Wrong Return" ? "rgba(239, 68, 68, 0.2)" :
-                              o.paymentStatus === "Exchange (1 Time)" ? "rgba(249, 115, 22, 0.15)" :
-                              o.paymentStatus === "Exchange (2 Times)" ? "rgba(225, 29, 72, 0.2)" :
-                              "rgba(239, 68, 68, 0.15)",
-                            color:
-                              o.paymentStatus === "Complete" ? "var(--success)" :
-                              o.paymentStatus === "Pending" ? "var(--warning)" :
-                              o.paymentStatus === "RTO Returned" ? "var(--info)" :
-                              o.paymentStatus === "Return" ? "#a78bfa" :
-                              o.paymentStatus === "Wrong Return" ? "var(--danger)" :
-                              o.paymentStatus === "Exchange (1 Time)" ? "#fb923c" :
-                              o.paymentStatus === "Exchange (2 Times)" ? "#f43f5e" :
-                              "var(--danger)"
-                          }}
-                        >
-                          <option value="Pending" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Pending</option>
-                          <option value="Complete" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Complete</option>
-                          <option value="Exchange (1 Time)" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Exchange (1 Time)</option>
-                          <option value="Exchange (2 Times)" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Exchange (2 Times)</option>
-                          <option value="RTO Returned" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>RTO Returned</option>
-                          <option value="Cancel" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Cancel</option>
-                          <option value="Return" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Return</option>
-                          <option value="Wrong Return" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Wrong Return</option>
-                        </select>
-                        {(o.paymentStatus === "Wrong Return" || o.paymentStatus === "Exchange (1 Time)" || o.paymentStatus === "Exchange (2 Times)") && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "4px" }}>
-                            <div 
-                              onClick={() => handleOpenLossModal(o)}
-                              style={{ 
-                                fontSize: "11px", 
-                                color: o.lossAmount > 0 ? "var(--danger)" : "#fb923c", 
-                                fontWeight: "600",
-                                cursor: "pointer",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                backgroundColor: o.lossAmount > 0 ? "rgba(239, 68, 68, 0.12)" : "rgba(249, 115, 22, 0.1)",
-                                border: `1px dashed ${o.lossAmount > 0 ? "rgba(239, 68, 68, 0.35)" : "rgba(249, 115, 22, 0.35)"}`
-                              }}
-                              title="Click to edit product loss amount"
-                            >
-                              <span>{o.lossAmount > 0 ? `Loss: ₹${o.lossAmount}` : `+ Add Loss (₹0)`}</span>
-                              <FaEdit style={{ fontSize: "10px" }} />
-                            </div>
-
-                            {(o.paymentStatus === "Exchange (1 Time)" || o.paymentStatus === "Exchange (2 Times)") && (
-                              <button
-                                type="button"
-                                onClick={() => handleCreateExchangeReDispatch(o)}
-                                style={{
-                                  fontSize: "10px",
-                                  fontWeight: "600",
-                                  background: "rgba(99, 102, 241, 0.1)",
-                                  border: "1px solid rgba(99, 102, 241, 0.3)",
-                                  borderRadius: "4px",
-                                  color: "var(--primary)",
-                                  cursor: "pointer",
-                                  padding: "2px 6px",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "3px"
-                                }}
-                                title="Create 2nd Dispatch Entry / બીજી વાર મોકલેલ પાર્સલની એન્ટ્રી કરો"
-                              >
-                                <FaBoxes style={{ fontSize: "9px" }} /> +2nd Dispatch
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Platform Claim status and amount */}
-                      <td style={{ padding: "14px 16px", fontSize: "13px" }}>
-                        {o.claimStatus && o.claimStatus !== "No Claim" ? (
-                          <div>
-                            <span style={{
-                              padding: "3px 6px",
-                              borderRadius: "4px",
-                              fontSize: "11px",
-                              fontWeight: "600",
-                              backgroundColor: 
-                                o.claimStatus === "Approved" ? "rgba(16, 185, 129, 0.15)" :
-                                o.claimStatus === "Pending" ? "rgba(245, 158, 11, 0.15)" :
-                                "rgba(239, 68, 68, 0.15)",
-                              color:
-                                o.claimStatus === "Approved" ? "var(--success)" :
-                                o.claimStatus === "Pending" ? "var(--warning)" :
-                                "var(--danger)",
-                              display: "inline-block",
-                              marginBottom: "2px"
-                            }}>
-                              {o.claimStatus}
-                            </span>
-                            {o.claimStatus === "Approved" && o.claimAmount > 0 && (
-                              <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--success)" }}>
-                                +₹{o.claimAmount}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span style={{ color: "var(--text-muted)", fontStyle: "italic", fontSize: "12px" }}>-</span>
-                        )}
-                      </td>
-                      <td 
-                        style={{ 
-                          padding: "14px 16px", 
-                          textAlign: "right", 
-                          fontSize: "14px", 
-                          fontWeight: "700", 
-                          color: profit >= 0 ? "var(--success)" : "var(--danger)" 
-                        }}
-                      >
-                        ₹{profit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
-                        <div style={{ display: "flex", justifyContent: "center", gap: "4px", alignItems: "center" }}>
-                          <button 
-                            type="button"
-                            onClick={() => startEdit(o)}
-                            style={{ 
-                              background: "none", 
-                              border: "none", 
-                              color: "var(--primary)", 
-                              cursor: "pointer", 
-                              fontSize: "15px",
-                              padding: "4px 8px",
-                              borderRadius: "4px",
-                              transition: "all var(--transition-fast)"
-                            }}
-                            className="edit-btn-hover"
-                            title="Edit Row"
-                          >
-                            <FaEdit />
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => handleDeleteRow(o._id)} 
-                            style={{ 
-                              background: "none", 
-                              border: "none", 
-                              color: "rgba(239, 68, 68, 0.7)", 
-                              cursor: "pointer", 
-                              fontSize: "15px",
-                              padding: "4px 8px",
-                              borderRadius: "4px",
-                              transition: "all var(--transition-fast)"
-                            }}
-                            className="delete-btn-hover"
-                            title="Delete Row"
-                          >
-                            <FaTrash />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-              {/* Excel-style Summary Row */}
-              {orders.length > 0 && (
-                <tr 
-                  style={{ 
-                    background: "rgba(99, 102, 241, 0.08)", 
-                    fontWeight: "700", 
-                    borderTop: "2px solid var(--primary)",
-                    borderBottom: "2px solid var(--primary)" 
+              <div style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: "600" }}>
+                Selected <strong style={{ color: "#ef4444" }}>{selectedOrderIds.length}</strong> orders from list
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrderIds([])}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid var(--border-color)",
+                    color: "var(--text-secondary)",
+                    padding: "8px 16px",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    cursor: "pointer"
                   }}
                 >
-                  <td colSpan="7" style={{ padding: "16px", textTransform: "uppercase", fontSize: "12px", color: "var(--primary)", trackingSpacing: "1px" }}>
-                    <FaFileInvoice /> Accounts Totals
-                  </td>
-                  <td style={{ padding: "16px", textAlign: "right", fontSize: "13px", color: "var(--text-primary)" }}>
-                    ₹{stats.totalPurchase.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ padding: "16px", textAlign: "right", fontSize: "13px", color: "var(--primary)" }}>
-                    ₹{stats.totalSales.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ padding: "16px", textAlign: "center", fontSize: "13px", color: "var(--text-primary)" }}>
-                    {stats.totalQty}
-                  </td>
-                  <td colSpan="4" style={{ padding: "16px" }}></td>
-                  <td 
-                    style={{ 
-                      padding: "16px", 
-                      textAlign: "right", 
-                      fontSize: "15px", 
-                      fontWeight: "800", 
-                      color: stats.totalProfit >= 0 ? "var(--success)" : "var(--danger)" 
+                  Clear Selection
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDeleteClick}
+                  style={{
+                    background: "#ef4444",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 16px",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  <FaTrash /> Delete Selected
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div
+            className="table-container animate-fade"
+            style={{
+              boxShadow: "var(--glass-shadow)",
+              borderRadius: "12px",
+              border: "1px solid var(--border-color)",
+              background: "var(--glass-bg)",
+              overflowX: "auto"
+            }}
+          >
+            <table className="premium-table" style={{ width: "100%", borderCollapse: "collapse", minWidth: "1000px" }}>
+              <thead>
+                <tr style={{ background: "rgba(0, 0, 0, 0.25)", borderBottom: "2px solid var(--border-color)" }}>
+                  <th style={{ padding: "14px 16px", textAlign: "center", width: "40px" }}>
+                    <input type="checkbox" checked={isAllSelected} onChange={handleToggleSelectAll} style={{ cursor: "pointer" }} />
+                  </th>
+                  <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Date</th>
+                  <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Shop / Store</th>
+                  <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Order No.</th>
+                  <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>AWB ID</th>
+                  <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Product Name</th>
+                  <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>State</th>
+                  <th style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px" }}>Buying (₹)</th>
+                  <th style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px" }}>Selling (₹)</th>
+                  <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>Qty</th>
+                  <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>GST</th>
+                  <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Courier</th>
+                  <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Payment</th>
+                  <th style={{ padding: "14px 16px", textAlign: "left", fontSize: "13px" }}>Platform Claim</th>
+                  <th style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px" }}>Net Profit (₹)</th>
+                  <th style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan="16" style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "14px" }}>
+                      {orders.length === 0 ? "No transactions logged in your accounts. Insert a row above to get started." : "No orders match your search/filter. Try different criteria or clear filters."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredOrders.map((o, idx) => {
+                    const purchaseVal = o.purchasePrice !== undefined && o.purchasePrice !== null ? o.purchasePrice : (o.productId?.purchasePrice || 0);
+                    const sellingVal = o.sellingPrice !== undefined && o.sellingPrice !== null ? o.sellingPrice : (o.productId?.sellingPrice || 0);
+                    const gstRate = o.gst || o.productId?.gst || 0;
+                    const qtyVal = o.quantity || 1;
+                    const courier = o.courierPartner || "Valmo";
+                    const orderNumber = o.orderNo || "-";
+                    const stateName = o.customerState || "Gujarat";
+                    const profit = calculateOrderProfit(o);
+                    const pStyle = getPlatformStyle(o.shopPlatform || "Meesho");
+
+                    const formattedDate = new Date(o.date || o.createdAt).toLocaleDateString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric"
+                    });
+
+                    return (
+                      <tr
+                        key={o._id}
+                        style={{
+                          borderBottom: "1px solid var(--border-color)",
+                          background: idx % 2 === 0 ? "rgba(255,255,255,0.01)" : "rgba(255,255,255,0.03)",
+                          transition: "background var(--transition-fast)"
+                        }}
+                        className="ledger-row-hover"
+                      >
+                        <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedOrderIds.includes(o._id)}
+                            onChange={() => handleToggleSelect(o._id)}
+                            style={{ cursor: "pointer" }}
+                          />
+                        </td>
+                        <td style={{ padding: "14px 16px", fontSize: "13px", color: "var(--text-secondary)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <FaCalendarAlt style={{ color: "var(--text-muted)" }} />
+                            {formattedDate}
+                          </div>
+                        </td>
+                        <td style={{ padding: "14px 16px", fontSize: "13px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                            <span style={{ fontWeight: "700", color: "var(--text-primary)", fontSize: "13px" }}>
+                              {o.shopName || "HKC Collection"}
+                            </span>
+                            <span style={{
+                              fontSize: "10px",
+                              fontWeight: "700",
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              background: pStyle.bg,
+                              color: pStyle.color,
+                              border: `1px solid ${pStyle.border}`,
+                              width: "fit-content",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "3px"
+                            }}>
+                              <FaTag style={{ fontSize: "8px" }} /> {o.shopPlatform || "Meesho"}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ padding: "14px 16px", fontFamily: "monospace", fontSize: "12px", color: "var(--text-muted)" }}>
+                          {orderNumber}
+                        </td>
+                        <td style={{ padding: "14px 16px", fontFamily: "monospace", fontSize: "12px", color: "var(--text-muted)" }}>
+                          {o.awbId || "-"}
+                        </td>
+                        <td style={{ padding: "14px 16px", fontWeight: "600", color: "var(--text-primary)", fontSize: "13px" }}>
+                          {o.productName || o.productId?.productName || "Unknown Product"}
+                        </td>
+                        <td style={{ padding: "14px 16px", fontSize: "13px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <FaMapMarkerAlt style={{ color: "var(--text-muted)", fontSize: "11px" }} />
+                            {stateName}
+                          </div>
+                        </td>
+                        <td style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px", fontWeight: "500" }}>
+                          ₹{purchaseVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ padding: "14px 16px", textAlign: "right", fontSize: "13px", fontWeight: "500" }}>
+                          ₹{sellingVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px" }}>{qtyVal}</td>
+                        <td style={{ padding: "14px 16px", textAlign: "center", fontSize: "13px", color: "var(--text-secondary)" }}>
+                          {gstRate}%
+                        </td>
+                        <td style={{ padding: "14px 16px", fontSize: "13px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--text-secondary)" }}>
+                            <FaTruck style={{ fontSize: "11px", color: "var(--text-muted)" }} />
+                            {courier}
+                          </div>
+                        </td>
+                        <td style={{ padding: "10px 16px", fontSize: "13px" }}>
+                          <select
+                            value={o.paymentStatus || "Pending"}
+                            onChange={(e) => handleStatusChange(o._id, e.target.value)}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: "8px",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              border: "1px solid var(--border-color)",
+                              cursor: "pointer",
+                              width: "145px",
+                              backgroundColor:
+                                o.paymentStatus === "Complete" ? "rgba(16, 185, 129, 0.15)" :
+                                  o.paymentStatus === "Pending" ? "rgba(245, 158, 11, 0.15)" :
+                                    o.paymentStatus === "RTO Returned" ? "rgba(14, 165, 233, 0.15)" :
+                                      o.paymentStatus === "Return" ? "rgba(139, 92, 246, 0.15)" :
+                                        o.paymentStatus === "Wrong Return" ? "rgba(239, 68, 68, 0.2)" :
+                                          o.paymentStatus === "Exchange (1 Time)" ? "rgba(249, 115, 22, 0.15)" :
+                                            o.paymentStatus === "Exchange (2 Times)" ? "rgba(225, 29, 72, 0.2)" :
+                                              "rgba(239, 68, 68, 0.15)",
+                              color:
+                                o.paymentStatus === "Complete" ? "var(--success)" :
+                                  o.paymentStatus === "Pending" ? "var(--warning)" :
+                                    o.paymentStatus === "RTO Returned" ? "var(--info)" :
+                                      o.paymentStatus === "Return" ? "#a78bfa" :
+                                        o.paymentStatus === "Wrong Return" ? "var(--danger)" :
+                                          o.paymentStatus === "Exchange (1 Time)" ? "#fb923c" :
+                                            o.paymentStatus === "Exchange (2 Times)" ? "#f43f5e" :
+                                              "var(--danger)"
+                            }}
+                          >
+                            <option value="Pending" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Pending</option>
+                            <option value="Complete" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Complete</option>
+                            <option value="Exchange (1 Time)" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Exchange (1 Time)</option>
+                            <option value="Exchange (2 Times)" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Exchange (2 Times)</option>
+                            <option value="RTO Returned" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>RTO Returned</option>
+                            <option value="Cancel" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Cancel</option>
+                            <option value="Return" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Return</option>
+                            <option value="Wrong Return" style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}>Wrong Return</option>
+                          </select>
+                          {(o.paymentStatus === "Wrong Return" || o.paymentStatus === "Exchange (1 Time)" || o.paymentStatus === "Exchange (2 Times)") && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "4px" }}>
+                              <div
+                                onClick={() => handleOpenLossModal(o)}
+                                style={{
+                                  fontSize: "11px",
+                                  color: o.lossAmount > 0 ? "var(--danger)" : "#fb923c",
+                                  fontWeight: "600",
+                                  cursor: "pointer",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  padding: "2px 6px",
+                                  borderRadius: "4px",
+                                  backgroundColor: o.lossAmount > 0 ? "rgba(239, 68, 68, 0.12)" : "rgba(249, 115, 22, 0.1)",
+                                  border: `1px dashed ${o.lossAmount > 0 ? "rgba(239, 68, 68, 0.35)" : "rgba(249, 115, 22, 0.35)"}`
+                                }}
+                                title="Click to edit product loss amount"
+                              >
+                                <span>{o.lossAmount > 0 ? `Loss: ₹${o.lossAmount}` : `+ Add Loss (₹0)`}</span>
+                                <FaEdit style={{ fontSize: "10px" }} />
+                              </div>
+
+                              {(o.paymentStatus === "Exchange (1 Time)" || o.paymentStatus === "Exchange (2 Times)") && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCreateExchangeReDispatch(o)}
+                                  style={{
+                                    fontSize: "10px",
+                                    fontWeight: "600",
+                                    background: "rgba(99, 102, 241, 0.1)",
+                                    border: "1px solid rgba(99, 102, 241, 0.3)",
+                                    borderRadius: "4px",
+                                    color: "var(--primary)",
+                                    cursor: "pointer",
+                                    padding: "2px 6px",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "3px"
+                                  }}
+                                  title="Create 2nd Dispatch Entry / બીજી વાર મોકલેલ પાર્સલની એન્ટ્રી કરો"
+                                >
+                                  <FaBoxes style={{ fontSize: "9px" }} /> +2nd Dispatch
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Platform Claim status and amount */}
+                        <td style={{ padding: "14px 16px", fontSize: "13px" }}>
+                          {o.claimStatus && o.claimStatus !== "No Claim" ? (
+                            <div>
+                              <span style={{
+                                padding: "3px 6px",
+                                borderRadius: "4px",
+                                fontSize: "11px",
+                                fontWeight: "600",
+                                backgroundColor:
+                                  o.claimStatus === "Approved" ? "rgba(16, 185, 129, 0.15)" :
+                                    o.claimStatus === "Pending" ? "rgba(245, 158, 11, 0.15)" :
+                                      "rgba(239, 68, 68, 0.15)",
+                                color:
+                                  o.claimStatus === "Approved" ? "var(--success)" :
+                                    o.claimStatus === "Pending" ? "var(--warning)" :
+                                      "var(--danger)",
+                                display: "inline-block",
+                                marginBottom: "2px"
+                              }}>
+                                {o.claimStatus}
+                              </span>
+                              {o.claimStatus === "Approved" && o.claimAmount > 0 && (
+                                <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--success)" }}>
+                                  +₹{o.claimAmount}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: "var(--text-muted)", fontStyle: "italic", fontSize: "12px" }}>-</span>
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "14px 16px",
+                            textAlign: "right",
+                            fontSize: "14px",
+                            fontWeight: "700",
+                            color: profit >= 0 ? "var(--success)" : "var(--danger)"
+                          }}
+                        >
+                          ₹{profit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                          <div style={{ display: "flex", justifyContent: "center", gap: "4px", alignItems: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => startEdit(o)}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: "var(--primary)",
+                                cursor: "pointer",
+                                fontSize: "15px",
+                                padding: "4px 8px",
+                                borderRadius: "4px",
+                                transition: "all var(--transition-fast)"
+                              }}
+                              className="edit-btn-hover"
+                              title="Edit Row"
+                            >
+                              <FaEdit />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRow(o._id)}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: "rgba(239, 68, 68, 0.7)",
+                                cursor: "pointer",
+                                fontSize: "15px",
+                                padding: "4px 8px",
+                                borderRadius: "4px",
+                                transition: "all var(--transition-fast)"
+                              }}
+                              className="delete-btn-hover"
+                              title="Delete Row"
+                            >
+                              <FaTrash />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+                {/* Excel-style Summary Row */}
+                {orders.length > 0 && (
+                  <tr
+                    style={{
+                      background: "rgba(99, 102, 241, 0.08)",
+                      fontWeight: "700",
+                      borderTop: "2px solid var(--primary)",
+                      borderBottom: "2px solid var(--primary)"
                     }}
                   >
-                    ₹{stats.totalProfit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ padding: "16px" }}></td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </>
-    )}
+                    <td colSpan="7" style={{ padding: "16px", textTransform: "uppercase", fontSize: "12px", color: "var(--primary)", trackingSpacing: "1px" }}>
+                      <FaFileInvoice /> Accounts Totals
+                    </td>
+                    <td style={{ padding: "16px", textAlign: "right", fontSize: "13px", color: "var(--text-primary)" }}>
+                      ₹{stats.totalPurchase.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: "16px", textAlign: "right", fontSize: "13px", color: "var(--primary)" }}>
+                      ₹{stats.totalSales.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: "16px", textAlign: "center", fontSize: "13px", color: "var(--text-primary)" }}>
+                      {stats.totalQty}
+                    </td>
+                    <td colSpan="4" style={{ padding: "16px" }}></td>
+                    <td
+                      style={{
+                        padding: "16px",
+                        textAlign: "right",
+                        fontSize: "15px",
+                        fontWeight: "800",
+                        color: stats.totalProfit >= 0 ? "var(--success)" : "var(--danger)"
+                      }}
+                    >
+                      ₹{stats.totalProfit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: "16px" }}></td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {/* Edit Sale Transaction Modal */}
       {editingOrder && (
         <div className="modal-overlay">
-          <div 
-            className="modal-content" 
-            style={{ 
-              maxWidth: "650px", 
-              maxHeight: "90vh", 
-              padding: 0, 
-              display: "flex", 
-              flexDirection: "column", 
-              overflow: "hidden" 
+          <div
+            className="modal-content"
+            style={{
+              maxWidth: "650px",
+              maxHeight: "90vh",
+              padding: 0,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden"
             }}
           >
             <div className="modal-header" style={{ padding: "18px 24px", margin: 0, borderBottom: "1px solid var(--border-color)" }}>
@@ -2804,13 +2833,13 @@ function Ledger() {
               <button className="modal-close" onClick={() => setEditingOrder(null)}>&times;</button>
             </div>
             <form onSubmit={handleEditSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-              <div 
-                className="form-grid" 
-                style={{ 
-                  padding: "20px 24px", 
-                  overflowY: "auto", 
-                  flex: 1, 
-                  maxHeight: "calc(90vh - 140px)" 
+              <div
+                className="form-grid"
+                style={{
+                  padding: "20px 24px",
+                  overflowY: "auto",
+                  flex: 1,
+                  maxHeight: "calc(90vh - 140px)"
                 }}
               >
                 <div>
@@ -2845,10 +2874,9 @@ function Ledger() {
                 <div>
                   <label>Courier Partner</label>
                   <select value={editCourierPartner} onChange={(e) => setEditCourierPartner(e.target.value)}>
-                    <option value="Valmo">Valmo</option>
-                    <option value="Xpressbees">Xpressbees</option>
-                    <option value="Shadowfax">Shadowfax</option>
-                    <option value="Delhivery">Delhivery</option>
+                    {courierList.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="form-full">
@@ -2940,13 +2968,13 @@ function Ledger() {
                           (જો એક્સચેન્જમાં પ્રોડક્ટ ગાયબ/ખોવાઈ હોય તો તે નુકસાનની રકમ લખો)
                         </span>
                       </label>
-                      <input 
-                        type="number" 
-                        value={editLossAmount} 
-                        onChange={(e) => setEditLossAmount(e.target.value)} 
+                      <input
+                        type="number"
+                        value={editLossAmount}
+                        onChange={(e) => setEditLossAmount(e.target.value)}
                         placeholder="દા.ત. ₹200 (પ્રોડક્ટ મિસિંગ અથવા ડેમેજ નુકસાન)"
-                        min="0" 
-                        step="0.01" 
+                        min="0"
+                        step="0.01"
                       />
                     </div>
                     {(() => {
@@ -3008,12 +3036,12 @@ function Ledger() {
                 {editClaimStatus === "Approved" && (
                   <div className="form-full">
                     <label>Claim Amount (₹)</label>
-                    <input 
-                      type="number" 
-                      value={editClaimAmount} 
-                      onChange={(e) => setEditClaimAmount(e.target.value)} 
-                      min="0" 
-                      step="0.01" 
+                    <input
+                      type="number"
+                      value={editClaimAmount}
+                      onChange={(e) => setEditClaimAmount(e.target.value)}
+                      min="0"
+                      step="0.01"
                     />
                   </div>
                 )}
@@ -3065,7 +3093,7 @@ function Ledger() {
                   We scanned the PDF labels and filled the fields. Please check product matches and select correct products where unmatched.
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => { setPreviewModalOpen(false); setParsedOrders([]); }}
                 style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px" }}
               >
@@ -3145,52 +3173,51 @@ function Ledger() {
                 <tbody>
                   {parsedOrders.map((item) => (
                     <Fragment key={item.tempId}>
-                      <tr 
-                        style={{ 
+                      <tr
+                        style={{
                           borderBottom: "1px solid var(--border-color)",
                           background: item.isDuplicate ? "rgba(239, 68, 68, 0.05)" : "transparent"
                         }}
                       >
                         <td style={{ padding: "10px 8px", textAlign: "left", color: "var(--text-muted)", fontSize: "11px" }}>{item.fileName ? `${item.fileName} (p.${item.pageNum})` : item.pageNum}</td>
                         <td style={{ padding: "6px 8px" }}>
-                          <input 
-                            type="date" 
-                            value={item.date || ""} 
-                            onChange={(e) => handleParsedFieldChange(item.tempId, "date", e.target.value)} 
+                          <input
+                            type="date"
+                            value={item.date || ""}
+                            onChange={(e) => handleParsedFieldChange(item.tempId, "date", e.target.value)}
                             style={{ height: "34px", fontSize: "12px", padding: "4px 8px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           />
                         </td>
                         <td style={{ padding: "6px 8px" }}>
-                          <input 
-                            type="text" 
-                            value={item.orderNo} 
-                            onChange={(e) => handleParsedFieldChange(item.tempId, "orderNo", e.target.value)} 
+                          <input
+                            type="text"
+                            value={item.orderNo}
+                            onChange={(e) => handleParsedFieldChange(item.tempId, "orderNo", e.target.value)}
                             style={{ height: "34px", fontSize: "13px", padding: "4px 8px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           />
                         </td>
                         <td style={{ padding: "6px 8px" }}>
-                          <input 
-                            type="text" 
-                            value={item.awbId} 
-                            onChange={(e) => handleParsedFieldChange(item.tempId, "awbId", e.target.value)} 
+                          <input
+                            type="text"
+                            value={item.awbId}
+                            onChange={(e) => handleParsedFieldChange(item.tempId, "awbId", e.target.value)}
                             style={{ height: "34px", fontSize: "13px", padding: "4px 8px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           />
                         </td>
                         <td style={{ padding: "6px 8px" }}>
-                          <select 
-                            value={item.courierPartner} 
+                          <select
+                            value={item.courierPartner}
                             onChange={(e) => handleParsedFieldChange(item.tempId, "courierPartner", e.target.value)}
                             style={{ height: "34px", fontSize: "13px", padding: "4px 8px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           >
-                            <option value="Valmo">Valmo</option>
-                            <option value="Xpressbees">Xpressbees</option>
-                            <option value="Shadowfax">Shadowfax</option>
-                            <option value="Delhivery">Delhivery</option>
+                            {courierList.map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
                           </select>
                         </td>
                         <td style={{ padding: "6px 8px" }}>
-                          <select 
-                            value={item.customerState} 
+                          <select
+                            value={item.customerState}
                             onChange={(e) => handleParsedFieldChange(item.tempId, "customerState", e.target.value)}
                             style={{ height: "34px", fontSize: "13px", padding: "4px 8px", width: "100%", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           >
@@ -3198,13 +3225,13 @@ function Ledger() {
                           </select>
                         </td>
                         <td style={{ padding: "6px 8px" }}>
-                          <select 
-                            value={item.productId} 
+                          <select
+                            value={item.productId}
                             onChange={(e) => handleParsedProductChange(item.tempId, e.target.value)}
-                            style={{ 
-                              height: "34px", 
-                              fontSize: "13px", 
-                              padding: "4px 8px", 
+                            style={{
+                              height: "34px",
+                              fontSize: "13px",
+                              padding: "4px 8px",
                               width: "100%",
                               background: !item.productId ? "rgba(245, 158, 11, 0.05)" : "var(--bg-primary)",
                               borderColor: !item.productId ? "var(--warning)" : "var(--border-color)",
@@ -3221,24 +3248,24 @@ function Ledger() {
                           </select>
                         </td>
                         <td style={{ padding: "6px 8px" }}>
-                          <input 
-                            type="number" 
+                          <input
+                            type="number"
                             min="1"
-                            value={item.quantity} 
-                            onChange={(e) => handleParsedFieldChange(item.tempId, "quantity", e.target.value)} 
+                            value={item.quantity}
+                            onChange={(e) => handleParsedFieldChange(item.tempId, "quantity", e.target.value)}
                             style={{ height: "34px", fontSize: "13px", padding: "4px 8px", width: "100%", textAlign: "center", background: "var(--bg-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", color: "var(--text-primary)" }}
                           />
                         </td>
                         <td style={{ padding: "10px 8px", textAlign: "center" }}>
                           {item.isDuplicate ? (
-                            <span 
+                            <span
                               title={item.duplicateReason}
-                              style={{ 
-                                background: "rgba(239, 68, 68, 0.15)", 
-                                color: "var(--danger)", 
-                                padding: "2px 6px", 
-                                borderRadius: "4px", 
-                                fontSize: "10px", 
+                              style={{
+                                background: "rgba(239, 68, 68, 0.15)",
+                                color: "var(--danger)",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontSize: "10px",
                                 fontWeight: "bold",
                                 display: "inline-block",
                                 maxWidth: "80px",
@@ -3250,13 +3277,13 @@ function Ledger() {
                               Duplicate
                             </span>
                           ) : !item.productId ? (
-                            <span 
-                              style={{ 
-                                background: "rgba(245, 158, 11, 0.15)", 
-                                color: "#b45309", 
-                                padding: "2px 6px", 
-                                borderRadius: "4px", 
-                                fontSize: "10px", 
+                            <span
+                              style={{
+                                background: "rgba(245, 158, 11, 0.15)",
+                                color: "#b45309",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontSize: "10px",
                                 fontWeight: "bold",
                                 display: "inline-block"
                               }}
@@ -3264,13 +3291,13 @@ function Ledger() {
                               No Product
                             </span>
                           ) : (
-                            <span 
-                              style={{ 
-                                background: "rgba(34, 197, 94, 0.15)", 
-                                color: "var(--success)", 
-                                padding: "2px 6px", 
-                                borderRadius: "4px", 
-                                fontSize: "10px", 
+                            <span
+                              style={{
+                                background: "rgba(34, 197, 94, 0.15)",
+                                color: "var(--success)",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontSize: "10px",
                                 fontWeight: "bold",
                                 display: "inline-block"
                               }}
@@ -3281,21 +3308,21 @@ function Ledger() {
                         </td>
                         <td style={{ padding: "6px 8px", textAlign: "center" }}>
                           <div style={{ display: "inline-flex", gap: "8px" }}>
-                            <button 
+                            <button
                               type="button"
                               onClick={() => setExpandedRawText(expandedRawText === item.tempId ? null : item.tempId)}
-                              style={{ 
-                                background: "none", 
-                                border: "none", 
-                                color: expandedRawText === item.tempId ? "var(--primary)" : "var(--text-muted)", 
-                                cursor: "pointer", 
-                                padding: "4px" 
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: expandedRawText === item.tempId ? "var(--primary)" : "var(--text-muted)",
+                                cursor: "pointer",
+                                padding: "4px"
                               }}
                               title="View Extracted Text"
                             >
                               <FaSearch size={12} />
                             </button>
-                            <button 
+                            <button
                               type="button"
                               onClick={() => handleRemoveParsedRow(item.tempId)}
                               style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", padding: "4px" }}
@@ -3344,17 +3371,17 @@ function Ledger() {
                 <span> / {parsedOrders.length} total. (Duplicate and unmatched rows will be skipped).</span>
               </div>
               <div style={{ display: "flex", gap: "12px" }}>
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
+                <button
+                  type="button"
+                  className="btn btn-secondary"
                   onClick={() => { setPreviewModalOpen(false); setParsedOrders([]); }}
                   style={{ height: "40px" }}
                 >
                   Cancel
                 </button>
-                <button 
-                  type="button" 
-                  className="btn btn-primary" 
+                <button
+                  type="button"
+                  className="btn btn-primary"
                   onClick={handleImportParsedOrders}
                   style={{ height: "40px", padding: "0 24px" }}
                   disabled={pdfParsing || parsedOrders.filter(item => !item.isDuplicate && item.productId).length === 0}
@@ -3392,11 +3419,11 @@ function Ledger() {
             {/* Modal Header */}
             <div style={{
               padding: "18px 24px",
-              background: lossModalStatus === "Exchange (2 Times)" 
-                ? "linear-gradient(135deg, rgba(225, 29, 72, 0.15), rgba(225, 29, 72, 0.05))" 
+              background: lossModalStatus === "Exchange (2 Times)"
+                ? "linear-gradient(135deg, rgba(225, 29, 72, 0.15), rgba(225, 29, 72, 0.05))"
                 : lossModalStatus === "Wrong Return"
-                ? "linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05))"
-                : "linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(249, 115, 22, 0.05))",
+                  ? "linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05))"
+                  : "linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(249, 115, 22, 0.05))",
               borderBottom: "1px solid var(--border-color)",
               display: "flex",
               justifyContent: "space-between",
@@ -3407,16 +3434,16 @@ function Ledger() {
                   width: "36px",
                   height: "36px",
                   borderRadius: "10px",
-                  backgroundColor: lossModalStatus === "Exchange (2 Times)" 
-                    ? "rgba(225, 29, 72, 0.2)" 
+                  backgroundColor: lossModalStatus === "Exchange (2 Times)"
+                    ? "rgba(225, 29, 72, 0.2)"
                     : lossModalStatus === "Wrong Return"
-                    ? "rgba(239, 68, 68, 0.2)"
-                    : "rgba(249, 115, 22, 0.2)",
-                  color: lossModalStatus === "Exchange (2 Times)" 
-                    ? "#f43f5e" 
+                      ? "rgba(239, 68, 68, 0.2)"
+                      : "rgba(249, 115, 22, 0.2)",
+                  color: lossModalStatus === "Exchange (2 Times)"
+                    ? "#f43f5e"
                     : lossModalStatus === "Wrong Return"
-                    ? "var(--danger)"
-                    : "#fb923c",
+                      ? "var(--danger)"
+                      : "#fb923c",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -3433,8 +3460,8 @@ function Ledger() {
                   </p>
                 </div>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => { setLossModalOpen(false); setLossModalOrder(null); }}
                 style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px", padding: "4px" }}
               >
